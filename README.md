@@ -91,6 +91,9 @@ lyricsync strip "cancion.mp3"
 
 # Regenerar el .lrc con resaltado por palabra
 lyricsync export "cancion.mp3" --enhanced
+
+# Revisar y corregir los tiempos a oído en el navegador
+lyricsync review ~/Musica
 ```
 
 ### Opciones útiles
@@ -103,6 +106,45 @@ lyricsync export "cancion.mp3" --enhanced
 | `--force` | Reprocesa archivos ya marcados por lyricsync. |
 | `--dry-run` | Informa de lo que pasaría, sin escribir nada. |
 | `--limit 10` | Prueba con las 10 primeras antes de lanzar el lote entero. |
+
+---
+
+## El revisor web
+
+Lo que convierte "casi en tiempo" en "en tiempo". Abre un reproductor local en
+el navegador con la letra scrolleando, y la corriges a oído:
+
+```bash
+lyricsync review ~/Musica
+
+# Solo las que el validador marcó para revisar
+lyricsync review ~/Musica --only-review
+```
+
+| Tecla | Acción |
+|-------|--------|
+| `espacio` | Reproducir / pausar |
+| `←` `→` | Mueve **toda** la letra 100 ms (con `Shift`, 10 ms) |
+| `↑` `↓` | Selecciona línea |
+| `T` | Fija el inicio de la línea seleccionada **al momento actual** |
+| `Ctrl+S` | Guardar |
+
+Hacer clic en una línea salta a ese punto de la canción, así que puedes
+comprobar un verso concreto al instante.
+
+El flujo normal son dos pasos: mueves todo con las flechas hasta que la primera
+estrofa encaja (eso arregla la mayoría de los desfases, que son constantes), y
+si alguna línea suelta sigue descuadrada, la seleccionas y la remarcas con `T`.
+
+Al guardar se reescribe el MP3 y el `.lrc`. **Los tiempos por palabra
+sobreviven**: cada palabra se desplaza junto con su línea, así que corregir el
+offset no destruye el trabajo de la alineación forzada.
+
+En el revisor la validación avisa pero **no bloquea**: estás escuchando la
+canción, tu criterio vale más que la heurística.
+
+El servidor escucha solo en `127.0.0.1` y únicamente sirve los archivos de la
+carpeta que le indicas.
 
 ---
 
@@ -137,6 +179,7 @@ src/lyricsync/
   cli.py          Interfaz de línea de comandos
   providers/      De dónde sale la letra (LRCLIB, archivos locales, embebida)
   align/          Cómo se sincroniza (alineación forzada, ASR)
+  review/         Revisor web local (servidor stdlib con soporte de Range)
 ```
 
 ## Desarrollo
@@ -154,8 +197,8 @@ respuestas HTTP, así que la suite no necesita ffmpeg, ni GPU, ni red.
 - **Fase 1** — letra sincronizada desde LRCLIB y archivos locales. ✅
 - **Fase 2** — alineación forzada con tiempos por palabra, aislado de voz,
   validación y ASR de reserva. ✅ (requiere el extra `[align]`)
-- **Fase 3** — lotes con caché e idempotencia. ✅ Pendiente: revisor web para
-  ajustar el offset a oído.
+- **Fase 3** — lotes con caché e idempotencia, y revisor web para ajustar los
+  tiempos a oído. ✅
 
 ## Nota
 

@@ -198,6 +198,64 @@ def export(
 
 
 @app.command()
+def review(
+    target: Path = typer.Argument(..., exists=True, help="An MP3 file or a folder of them."),
+    port: int = typer.Option(8733, "--port"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Keep this on localhost unless you know why."),
+    recursive: bool = typer.Option(True, "--recursive/--no-recursive"),
+    only_review: bool = typer.Option(
+        False, "--only-review", help="Only tracks whose last run was flagged for review."
+    ),
+    enhanced: bool = typer.Option(False, "--enhanced", help="Save the sidecar with word-level tags."),
+    backup: bool = typer.Option(False, "--backup"),
+    id3: int = typer.Option(3, "--id3"),
+    open_browser: bool = typer.Option(True, "--open/--no-open"),
+    cache: Path = typer.Option(DEFAULT_CACHE, "--cache"),
+) -> None:
+    """Check timings by ear in the browser and correct them.
+
+    Play the track, nudge the whole set of lyrics with the arrow keys until it
+    lines up, or re-tap an individual line with T. Saving writes straight back
+    to the MP3 and its .lrc.
+    """
+    from .review import serve
+    from .review.state import ReviewConfig
+
+    tracks = find_tracks(target, recursive=recursive)
+
+    if only_review:
+        flagged = _flagged_for_review(cache)
+        tracks = [p for p in tracks if str(p) in flagged]
+        if not tracks:
+            console.print("[green]Nothing is flagged for review.[/green]")
+            raise typer.Exit(0)
+
+    if not tracks:
+        console.print("[red]No MP3 files found.[/red]")
+        raise typer.Exit(1)
+
+    serve(
+        tracks,
+        host=host,
+        port=port,
+        config=ReviewConfig(
+            id3_version=id3, enhanced_sidecar=enhanced, backup=backup
+        ),
+        open_browser=open_browser,
+    )
+
+
+def _flagged_for_review(cache: Path) -> set[str]:
+    """Paths whose most recent run ended in the review state."""
+    if not cache.exists():
+        return set()
+    latest: dict[str, str] = {}
+    for row in Store(cache).history(limit=5000):
+        latest.setdefault(row["path"], row["status"])
+    return {path for path, status in latest.items() if status == Status.REVIEW.value}
+
+
+@app.command()
 def history(
     limit: int = typer.Option(20, "--limit"),
     cache: Path = typer.Option(DEFAULT_CACHE, "--cache"),

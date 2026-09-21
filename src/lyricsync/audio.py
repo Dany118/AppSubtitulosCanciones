@@ -14,6 +14,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .device import resolve as resolve_device
+
 SAMPLE_RATE = 16_000
 
 
@@ -49,6 +51,7 @@ def separate_vocals(path: Path, work_dir: Path, *, device: str = "cuda", model: 
     stable across Demucs versions while the API has not.
     """
     work_dir.mkdir(parents=True, exist_ok=True)
+    device, _ = resolve_device(device)
     command = [
         sys.executable, "-m", "demucs",
         "--two-stems", "vocals",

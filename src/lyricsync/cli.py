@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 from pathlib import Path
 
 import typer
@@ -302,6 +303,80 @@ def history(
             escape(row["message"] or ""),
         )
     console.print(table)
+
+
+@app.command()
+def doctor() -> None:
+    """Report what is installed and what each part of the pipeline can do.
+
+    The common failure is a CPU-only PyTorch answering a request for CUDA, so
+    this names the situation and the fix rather than leaving it to surface
+    halfway through a batch.
+    """
+    from .audio import have_ffmpeg
+    from .device import cuda_available
+
+    table = Table(show_header=True)
+    for column in ("Componente", "Estado", "Para qué sirve"):
+        table.add_column(column)
+
+    def row(name: str, ok: bool, detail: str, purpose: str) -> None:
+        mark = "[green]sí[/green]" if ok else "[yellow]no[/yellow]"
+        table.add_row(name, f"{mark} {escape(detail)}" if detail else mark, purpose)
+
+    row("Python", True, platform.python_version(), "el programa")
+    row("ffmpeg", have_ffmpeg(), "", "leer el audio para alinear o transcribir")
+
+    torch_version = ""
+    cuda_build = None
+    try:
+        import torch
+
+        torch_version = torch.__version__
+        cuda_build = torch.version.cuda
+        has_torch = True
+    except ImportError:
+        has_torch = False
+    row("PyTorch", has_torch, torch_version, "alineación, transcripción y traducción")
+
+    if has_torch:
+        usable = cuda_available()
+        detail = f"build {cuda_build}" if cuda_build else "build sin CUDA"
+        row("GPU (CUDA)", usable, detail, "lo mismo, pero mucho más rápido")
+
+    for module, purpose in (
+        ("torchaudio", "alineación forzada"),
+        ("transformers", "traducción"),
+        ("sentencepiece", "traducción"),
+        ("demucs", "aislar la voz"),
+        ("faster_whisper", "transcribir cuando no hay letra"),
+    ):
+        try:
+            __import__(module)
+            present = True
+        except ImportError:
+            present = False
+        row(module, present, "", purpose)
+
+    console.print(table)
+
+    if not has_torch:
+        console.print(
+            "\n[dim]Sin PyTorch funcionan las letras ya sincronizadas y la interfaz.[/dim]"
+            "\n[dim]Para alinear, transcribir o traducir:[/dim]"
+            "\n    pip install -r requirements-gpu.txt       [dim](si tienes GPU NVIDIA)[/dim]"
+            "\n    pip install -r requirements-translate.txt"
+        )
+    elif not cuda_available():
+        console.print(
+            "\n[yellow]PyTorch está instalado pero no puede usar la GPU.[/yellow]"
+            " Todo funciona igual, en CPU y más lento."
+            "\n[dim]Si tienes una NVIDIA y quieres usarla:[/dim]"
+            "\n    pip uninstall -y torch torchaudio"
+            "\n    pip install -r requirements-gpu.txt"
+        )
+    else:
+        console.print("\n[green]Todo listo, incluida la GPU.[/green]")
 
 
 @app.command()

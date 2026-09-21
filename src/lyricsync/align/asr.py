@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..device import resolve as resolve_device
 from ..models import LyricLine, Lyrics, Source, Word
 from ..text import clean_lyric_line
 
@@ -24,7 +25,7 @@ class AsrTranscriber:
 
     def __init__(self, model_size: str = "large-v3", device: str = "cuda", language: str | None = "en") -> None:
         self.model_size = model_size
-        self.device = device
+        self.device, self.device_note = resolve_device(device)
         self.language = language
         self._model = None
 

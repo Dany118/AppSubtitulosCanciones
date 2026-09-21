@@ -55,15 +55,18 @@ set /p GPU="  Instalar tambien la parte de GPU? (s/N): "
 if /i not "%GPU%"=="s" goto :done
 
 echo.
-echo   Descargando PyTorch y los modelos... esto tarda un rato.
+echo   Descargando PyTorch con CUDA... esto tarda un rato.
+call .venv\Scripts\python.exe -m pip install -r requirements-gpu.txt
 call .venv\Scripts\python.exe -m pip install -r requirements-align.txt
+call .venv\Scripts\python.exe -m pip install -r requirements-translate.txt
 if errorlevel 1 (
     echo.
     echo   [!] Fallo la instalacion de la parte de GPU.
     echo       La aplicacion funciona igual sin ella.
 ) else (
     echo.
-    echo   Parte de GPU instalada.
+    echo   Parte de GPU instalada. Comprobando...
+    call .venv\Scripts\python.exe -m lyricsync doctor
     where ffmpeg >nul 2>&1
     if errorlevel 1 (
         echo.

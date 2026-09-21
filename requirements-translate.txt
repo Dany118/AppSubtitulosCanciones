@@ -1,12 +1,12 @@
 # Traduccion automatica local (ingles -> espanol u otro idioma).
 # El modelo son unos cientos de MB y se descarga la primera vez.
-# No necesita clave de API ni conexion despues de la primera descarga.
+# No necesita clave de API ni conexion despues de esa descarga.
 #
+# Si quieres usar la GPU, instala PRIMERO requirements-gpu.txt:
+#   pip install -r requirements-gpu.txt
 #   pip install -r requirements-translate.txt
 #
-# Si ya instalaste requirements-align.txt, torch ya esta y esto es pequeno.
-
---extra-index-url https://download.pytorch.org/whl/cu124
+# Sin ese paso funciona igual, en CPU: son unos segundos por cancion.
 
 torch>=2.1
 transformers>=4.40

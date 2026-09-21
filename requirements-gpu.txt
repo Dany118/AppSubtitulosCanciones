@@ -1,0 +1,16 @@
+# PyTorch con soporte CUDA.  INSTALA ESTE ARCHIVO PRIMERO, antes de
+# requirements-align.txt o requirements-translate.txt.
+#
+#   pip install -r requirements-gpu.txt
+#
+# Usa --index-url (no --extra-index-url) a proposito: con el indice extra,
+# pip ve tambien PyPI y suele elegir la rueda de ahi, que en Windows es solo
+# CPU. Eso da el error "Torch not compiled with CUDA enabled".
+#
+# cu124 vale para drivers NVIDIA recientes. Si el tuyo es mas antiguo, cambia
+# cu124 por cu121. Para comprobar que quedo bien:  lyricsync doctor
+
+--index-url https://download.pytorch.org/whl/cu124
+
+torch>=2.1
+torchaudio>=2.1

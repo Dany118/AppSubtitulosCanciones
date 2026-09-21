@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..device import resolve as resolve_device
 from ..models import Word
 from ..text import normalize_for_alignment
 
@@ -28,7 +29,7 @@ class ForcedAligner:
     SAMPLE_RATE = 16_000
 
     def __init__(self, device: str = "cuda") -> None:
-        self.device = device
+        self.device, self.device_note = resolve_device(device)
         self._model = None
         self._tokenizer = None
         self._aligner = None

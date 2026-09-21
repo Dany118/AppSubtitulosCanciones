@@ -35,10 +35,13 @@ read -r -p "  Instalar tambien la parte de GPU? (s/N): " gpu
 
 if [[ "${gpu,,}" == "s" ]]; then
     echo
-    echo "  Descargando PyTorch y los modelos... esto tarda un rato."
-    if .venv/bin/python -m pip install -r requirements-align.txt; then
+    echo "  Descargando PyTorch con CUDA... esto tarda un rato."
+    if .venv/bin/python -m pip install -r requirements-gpu.txt \
+       && .venv/bin/python -m pip install -r requirements-align.txt \
+       && .venv/bin/python -m pip install -r requirements-translate.txt; then
         echo
-        echo "  Parte de GPU instalada."
+        echo "  Parte de GPU instalada. Comprobando..."
+        .venv/bin/python -m lyricsync doctor
         command -v ffmpeg >/dev/null 2>&1 || {
             echo
             echo "  [!] Falta ffmpeg, que esta parte necesita."

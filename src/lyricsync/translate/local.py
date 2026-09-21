@@ -7,6 +7,8 @@ translated on its own so the result stays one-to-one with the timestamps.
 
 from __future__ import annotations
 
+from ..device import resolve as resolve_device
+
 # Marian publishes one model per language pair.
 MODEL_TEMPLATE = "Helsinki-NLP/opus-mt-{source}-{target}"
 BATCH_SIZE = 16
@@ -31,7 +33,7 @@ class MarianTranslator:
     ) -> None:
         self.target_language = target_language
         self.source_language = source_language
-        self.device = device
+        self.device, self.device_note = resolve_device(device)
         self.model_name = model_name or MODEL_TEMPLATE.format(
             source=source_language, target=target_language
         )

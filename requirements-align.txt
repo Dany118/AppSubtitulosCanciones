@@ -1,12 +1,11 @@
-# Alineación forzada y transcripción (las estrategias 2 y 3 del pipeline).
-# Pesado: descarga varios GB. Requiere además ffmpeg en el PATH.
+# Alineacion forzada y transcripcion (las estrategias 2 y 3 del pipeline).
+# Requiere ffmpeg en el PATH.
 #
+# Si quieres usar la GPU, instala PRIMERO requirements-gpu.txt:
+#   pip install -r requirements-gpu.txt
 #   pip install -r requirements-align.txt
 #
-# El índice extra sirve las ruedas de PyTorch con CUDA 12.4. Si tu driver es
-# más antiguo, cambia cu124 por cu121. Para CPU, usa el índice /whl/cpu.
-
---extra-index-url https://download.pytorch.org/whl/cu124
+# Sin ese paso funciona igual, pero en CPU y mucho mas lento.
 
 torch>=2.1
 torchaudio>=2.1

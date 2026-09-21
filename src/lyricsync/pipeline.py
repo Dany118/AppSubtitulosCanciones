@@ -78,6 +78,8 @@ class Pipeline:
         self.store = store
         self._aligner: ForcedAligner | None = None
         self._translator: MarianTranslator | None = None
+        # A device downgrade is reported once, not on every track of a batch.
+        self._device_notes: set[str] = set()
         self._lrclib = LrclibProvider() if config.use_network else None
         self._local = LocalFileProvider()
         self._embedded = EmbeddedProvider()
@@ -117,6 +119,14 @@ class Pipeline:
 
     # ------------------------------------------------------------- alignment
 
+    def _device_note(self, component) -> list[str]:
+        """Surface a device downgrade once, so a slow run is never a mystery."""
+        note = getattr(component, "device_note", None)
+        if not note or note in self._device_notes:
+            return []
+        self._device_notes.add(note)
+        return [note]
+
     def _get_aligner(self) -> ForcedAligner:
         if self._aligner is None:
             self._aligner = ForcedAligner(device=self.config.device)
@@ -147,6 +157,7 @@ class Pipeline:
                 source_path = meta.path
 
         aligner = self._get_aligner()
+        warnings += self._device_note(aligner)
         samples = decode_mono(source_path, ForcedAligner.SAMPLE_RATE)
         aligned: list[Word] = aligner.align(samples, words, sample_rate=ForcedAligner.SAMPLE_RATE)
         attach_words(lyrics, aligned)
@@ -189,12 +200,15 @@ class Pipeline:
         if self.store is not None:
             cached = self.store.get_translations(texts, lang)
 
+        notes: list[str] = []
         pending = [text for text in dict.fromkeys(texts) if text not in cached]
         if pending:
+            translator = self._get_translator()
+            notes += self._device_note(translator)
             try:
-                fresh = self._get_translator().translate(pending)
+                fresh = translator.translate(pending)
             except TranslationError as exc:
-                return [f"translation unavailable: {exc}"]
+                return [*notes, f"translation unavailable: {exc}"]
             new_pairs = dict(zip(pending, fresh))
             cached.update(new_pairs)
             if self.store is not None:
@@ -204,7 +218,9 @@ class Pipeline:
             line.translation = cached.get(line.text) or None
 
         missing = sum(1 for line in lines if not line.translation)
-        return [f"{missing} line(s) could not be translated"] if missing else []
+        if missing:
+            notes.append(f"{missing} line(s) could not be translated")
+        return notes
 
     def _onset(self, meta: TrackMeta, work_dir: Path) -> float | None:
         """Detect when singing starts, for the timing plausibility check."""

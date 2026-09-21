@@ -89,6 +89,23 @@ class AppServer(ThreadingHTTPServer):
         return Store(self.cache_path) if self.cache_path else None
 
 
+def _lookup(table: dict[str, str] | None, path: Path) -> str | None:
+    """Find a path in a run-log map, tolerating a non-canonical key.
+
+    Runs recorded from the CLI may have been logged relative to whatever
+    directory it ran in, so a direct hit is tried before paying for resolve().
+    """
+    if not table:
+        return None
+    hit = table.get(str(path))
+    if hit is not None:
+        return hit
+    try:
+        return table.get(str(path.resolve()))
+    except OSError:
+        return None
+
+
 def pick_folder() -> str | None:
     """Open the operating system's folder chooser.
 
@@ -232,7 +249,12 @@ class AppHandler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def _track_summary(self, index: int) -> dict:
+    def _track_summary(
+        self,
+        index: int,
+        statuses: dict[str, str] | None = None,
+        messages: dict[str, str] | None = None,
+    ) -> dict:
         path = self.server.tracks[index]
         lyrics = self.server.lyrics_for(index)
         try:
@@ -250,12 +272,21 @@ class AppHandler(BaseHTTPRequestHandler):
             "hasLyrics": bool(lyrics),
             "wordLevel": bool(lyrics and lyrics.word_level),
             "marker": read_marker(path),
+            "lastStatus": _lookup(statuses, path),
+            "lastMessage": _lookup(messages, path) or "",
         }
 
     def _serve_library(self) -> None:
+        # Read the run log once for the whole listing rather than per track.
+        store = self.server.store()
+        statuses = store.latest_statuses() if store else {}
+        messages = store.latest_messages() if store else {}
         self._send_json({
             "folder": str(self.server.folder) if self.server.folder else None,
-            "tracks": [self._track_summary(i) for i in range(len(self.server.tracks))],
+            "tracks": [
+                self._track_summary(i, statuses, messages)
+                for i in range(len(self.server.tracks))
+            ],
         })
 
     def _serve_track(self, index: int) -> None:
@@ -408,7 +439,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self._send_error_json(HTTPStatus.BAD_REQUEST, "'path' is required")
             return
 
+        # Canonical so the paths match what the run log recorded.
         folder = Path(body["path"]).expanduser()
+        if folder.exists():
+            folder = folder.resolve()
         if not folder.exists():
             self._send_error_json(HTTPStatus.BAD_REQUEST, f"no such folder: {folder}")
             return
@@ -543,7 +577,8 @@ class AppHandler(BaseHTTPRequestHandler):
             result = pipeline.process(path)
             if store is not None:
                 store.log_run(path, result.status.value,
-                              result.source.value if result.source else None, result.message)
+                              result.source.value if result.source else None,
+                              result.log_message)
             server.invalidate()
             return {
                 "item": path.name,

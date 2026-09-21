@@ -78,7 +78,8 @@ def sync(
             status_line.update(f"[bold]({index}/{len(tracks)})[/bold] {path.name}")
             result = pipeline.process(path)
             results.append(result)
-            store.log_run(path, result.status.value, result.source.value if result.source else None, result.message)
+            store.log_run(path, result.status.value,
+                          result.source.value if result.source else None, result.log_message)
             _print_result(result)
 
     _print_summary(results)
@@ -262,10 +263,11 @@ def _flagged_for_review(cache: Path) -> set[str]:
     """Paths whose most recent run ended in the review state."""
     if not cache.exists():
         return set()
-    latest: dict[str, str] = {}
-    for row in Store(cache).history(limit=5000):
-        latest.setdefault(row["path"], row["status"])
-    return {path for path, status in latest.items() if status == Status.REVIEW.value}
+    return {
+        path
+        for path, status in Store(cache).latest_statuses().items()
+        if status == Status.REVIEW.value
+    }
 
 
 @app.command()

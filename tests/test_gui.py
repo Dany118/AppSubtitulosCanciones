@@ -378,3 +378,60 @@ def test_static_assets_are_served_with_correct_types(client: httpx.Client) -> No
         response = client.get(asset)
         assert response.status_code == 200, asset
         assert expected in response.headers["content-type"]
+
+
+# --------------------------------------------------------- review state
+
+def test_library_reports_no_status_without_a_cache(client: httpx.Client) -> None:
+    entry = client.get("/api/library").json()["tracks"][0]
+    assert entry["lastStatus"] is None
+    assert entry["lastMessage"] == ""
+
+
+def test_library_surfaces_the_last_run_status(track: Path, tmp_path: Path) -> None:
+    """A flagged run must be visible in the listing, not only in the history."""
+    from lyricsync.store import Store
+
+    cache = tmp_path / "cache.db"
+    Store(cache).log_run(track, "review", "lrclib-synced", "first line drifts")
+
+    server = AppServer(("127.0.0.1", 0), [track], AppConfig(), cache)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
+    thread.start()
+    try:
+        with httpx.Client(base_url=f"http://127.0.0.1:{server.server_address[1]}") as c:
+            entry = c.get("/api/library").json()["tracks"][0]
+        assert entry["lastStatus"] == "review"
+        assert entry["lastMessage"] == "first line drifts"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_sync_job_records_warnings_as_the_run_note(track: Path, tmp_path: Path) -> None:
+    """A review result carries warnings, not a message; the log must say why."""
+    from lyricsync.store import Store
+
+    cache = tmp_path / "cache.db"
+    # Lyrics that run past the end of the ~2 s fixture: written, but flagged.
+    track.with_suffix(".lrc").write_text("[00:00.50]alpha bravo\n[00:04.00]charlie\n", encoding="utf-8")
+
+    server = AppServer(("127.0.0.1", 0), [track], AppConfig(), cache)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
+    thread.start()
+    try:
+        with httpx.Client(base_url=f"http://127.0.0.1:{server.server_address[1]}", timeout=15.0) as c:
+            started = c.post("/api/jobs/sync", json={
+                "indices": [0], "options": {"offline": True, "demucs": False, "force": True},
+            })
+            job = wait_for_job(c, started.json()["id"])
+            assert job["events"][0]["status"] == "review"
+
+            entry = c.get("/api/library").json()["tracks"][0]
+            assert entry["lastStatus"] == "review"
+            assert entry["lastMessage"], "the reason must be recorded, not blank"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

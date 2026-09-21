@@ -112,3 +112,13 @@ class ProcessResult:
     warnings: list[str] = field(default_factory=list)
     line_count: int = 0
     word_level: bool = False
+
+    @property
+    def log_message(self) -> str:
+        """What to record in the run log.
+
+        A flagged result usually carries no message, only warnings, so
+        recording ``message`` alone would log a blank reason for exactly the
+        cases the user needs to understand.
+        """
+        return self.message or "; ".join(self.warnings)

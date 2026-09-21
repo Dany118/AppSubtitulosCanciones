@@ -155,8 +155,9 @@ lyricsync gui ~/Musica        # o ábrela ya cargada
 
 Se abre en el navegador (en `127.0.0.1`, solo tu máquina). Cuatro pestañas:
 
-**Biblioteca** — la lista de pistas con su estado (sincronizada, por palabra, sin
-letra). Marcas las que quieras y pulsas **Sincronizar** o **Limpiar letra**. En
+**Biblioteca** — la lista de pistas con su estado: *sincronizada*, *por palabra*,
+*sin letra*, o **revisar** en ámbar cuando el validador no quedó convencido de
+los tiempos (pasa el ratón por encima y te dice por qué). Marcas las que quieras y pulsas **Sincronizar** o **Limpiar letra**. En
 **Opciones** están todos los modificadores de la CLI: aislar voz, transcribir,
 sin red, reprocesar, copia `.bak`, simulacro, dispositivo y adelanto.
 

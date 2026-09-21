@@ -96,6 +96,26 @@ class Store:
             )
             conn.commit()
 
+    def latest_statuses(self) -> dict[str, str]:
+        """The most recent run status for every file, keyed by path.
+
+        SQLite resolves the bare ``status`` column to the row that produced
+        the MAX(), so this needs one pass rather than a correlated subquery.
+        """
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT path, status, MAX(ran_at) FROM runs GROUP BY path"
+            ).fetchall()
+        return {row["path"]: row["status"] for row in rows}
+
+    def latest_messages(self) -> dict[str, str]:
+        """The note recorded alongside each file's most recent run."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT path, message, MAX(ran_at) FROM runs GROUP BY path"
+            ).fetchall()
+        return {row["path"]: row["message"] or "" for row in rows}
+
     def history(self, limit: int = 50) -> list[sqlite3.Row]:
         with closing(self._connect()) as conn:
             return conn.execute(

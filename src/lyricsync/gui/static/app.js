@@ -73,10 +73,24 @@ async function loadLibrary(path) {
   }
 }
 
+/** Build the state badge as a node: the tooltip text comes from the run log. */
 function trackBadge(track) {
-  if (!track.hasLyrics) return '<span class="badge none">sin letra</span>';
-  if (track.wordLevel) return '<span class="badge ok">por palabra</span>';
-  return '<span class="badge ok">sincronizada</span>';
+  const el = document.createElement("span");
+  el.className = "badge";
+
+  if (!track.hasLyrics) {
+    el.classList.add("none");
+    el.textContent = "sin letra";
+  } else if (track.lastStatus === "review") {
+    // Flagged by the validator: written, but the timings need a listen.
+    el.classList.add("warn");
+    el.textContent = "revisar";
+    el.title = track.lastMessage || "Los tiempos no convencieron al validador";
+  } else {
+    el.classList.add("ok");
+    el.textContent = track.wordLevel ? "por palabra" : "sincronizada";
+  }
+  return el;
 }
 
 function renderLibrary() {
@@ -119,7 +133,7 @@ function renderLibrary() {
     dur.textContent = fmtDuration(track.duration);
 
     const badge = document.createElement("td");
-    badge.innerHTML = trackBadge(track);
+    badge.append(trackBadge(track));
 
     const lines = document.createElement("td");
     lines.className = "num";

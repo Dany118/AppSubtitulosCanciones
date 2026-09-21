@@ -60,6 +60,10 @@ class Lyrics:
     # Providers flag purely instrumental tracks so the pipeline skips them
     # instead of trying to align silence against an empty transcript.
     instrumental: bool = False
+    # Carried from the file's header so a re-render reproduces the layout it
+    # was written with, instead of silently dropping the second language.
+    translation_language: str | None = None
+    bilingual_style: str | None = None
 
     @property
     def synced(self) -> bool:

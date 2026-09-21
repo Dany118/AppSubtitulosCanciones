@@ -93,6 +93,22 @@ function trackBadge(track) {
   return el;
 }
 
+/** A separate chip, so "timed" and "translated" are two visible facts. */
+function translationChip(track) {
+  if (!track.hasLyrics) return null;
+  const el = document.createElement("span");
+  el.className = "badge chip";
+  if (track.translated) {
+    el.classList.add("ok");
+    el.textContent = (track.language || "es").toUpperCase();
+    el.title = "Esta pista lleva la traducción junto al original";
+  } else {
+    el.classList.add("none");
+    el.textContent = "sin traducir";
+  }
+  return el;
+}
+
 function renderLibrary() {
   const body = $("libbody");
   body.innerHTML = "";
@@ -134,6 +150,8 @@ function renderLibrary() {
 
     const badge = document.createElement("td");
     badge.append(trackBadge(track));
+    const chip = translationChip(track);
+    if (chip) badge.append(chip);
 
     const lines = document.createElement("td");
     lines.className = "num";
@@ -269,9 +287,16 @@ async function openReview(index) {
     $("player").src = `/api/audio/${index}`;
     renderLines();
     refreshReview();
-    setStatus(data.lines.length
-      ? `${data.lines.length} líneas · origen: ${data.source}`
-      : "Esta pista no tiene letra sincronizada.");
+
+    if (!data.lines.length) {
+      setStatus("Esta pista no tiene letra sincronizada.");
+    } else {
+      const translated = data.lines.filter((l) => l.translation).length;
+      const note = data.translated
+        ? ` · traducida (${data.language || "?"}): ${translated}/${data.lines.length} líneas`
+        : " · sin traducción";
+      setStatus(`${data.lines.length} líneas · origen: ${data.source}${note}`);
+    }
   } catch (err) {
     setStatus(String(err.message || err), "err");
   }
@@ -294,9 +319,23 @@ function renderLines() {
 
     const stamp = document.createElement("span");
     stamp.className = "stamp";
+
     const text = document.createElement("span");
     text.className = "ltext";
-    text.textContent = line.text;
+
+    const original = document.createElement("span");
+    original.className = "original";
+    original.textContent = line.text;
+    text.append(original);
+
+    // The translation is the whole point of reading along, so it is shown
+    // under the original rather than hidden behind a toggle.
+    if (line.translation) {
+      const translated = document.createElement("span");
+      translated.className = "translated";
+      translated.textContent = line.translation;
+      text.append(translated);
+    }
 
     row.append(stamp, text);
     row.onclick = () => {
@@ -404,9 +443,18 @@ async function loadInspect() {
 
     const facts = document.createElement("dl");
     facts.className = "facts";
+    const translation = data.totalLines
+      ? (data.translatedLines
+          ? `sí — ${data.translatedLines} de ${data.totalLines} líneas`
+            + ` (${data.language || "?"}, ${data.bilingualStyle === "stacked" ? "línea aparte" : "misma línea"})`
+          : `no — 0 de ${data.totalLines} líneas`)
+      : "no hay letra";
+
     const rows = [
       ["Archivo", data.name],
       ["Ruta", data.path],
+      ["Traducción", translation],
+      ["Traducción manual", data.manualTranslation ? "sí, hay un .es.txt al lado" : "no"],
       ["Frames de letra", data.frames.length ? data.frames.join(", ") : "ninguno"],
       ["Marca de lyricsync", data.marker || "ninguna"],
       ["Sidecar .lrc", data.sidecar ? "sí" : "no"],

@@ -436,3 +436,91 @@ def test_sync_job_records_warnings_as_the_run_note(track: Path, tmp_path: Path) 
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+# ------------------------------------------------------------- translation
+
+BILINGUAL_LRC = (
+    "[tool:lyricsync test]\n"
+    "[tr:es]\n"
+    "[trsep: / ]\n"
+    "[00:00.50]alpha bravo / alfa bravo\n"
+    "[00:01.20]charlie delta / charli delta\n"
+)
+
+
+@pytest.fixture
+def bilingual_track(track: Path) -> Path:
+    track.with_suffix(".lrc").write_text(BILINGUAL_LRC, encoding="utf-8")
+    return track
+
+
+def test_track_endpoint_returns_each_translation(client: httpx.Client, bilingual_track: Path) -> None:
+    data = client.get("/api/track/0").json()
+
+    assert data["translated"] is True
+    assert data["language"] == "es"
+    assert data["bilingualStyle"] == "inline"
+    assert [line["text"] for line in data["lines"]] == ["alpha bravo", "charlie delta"]
+    assert [line["translation"] for line in data["lines"]] == ["alfa bravo", "charli delta"]
+
+
+def test_library_marks_a_translated_track(client: httpx.Client, bilingual_track: Path) -> None:
+    entry = client.get("/api/library").json()["tracks"][0]
+    assert entry["translated"] is True
+    assert entry["language"] == "es"
+
+
+def test_library_marks_an_untranslated_track(client: httpx.Client) -> None:
+    entry = client.get("/api/library").json()["tracks"][0]
+    assert entry["translated"] is False
+
+
+def test_inspect_counts_translated_lines(client: httpx.Client, bilingual_track: Path) -> None:
+    data = client.get("/api/inspect/0").json()
+    assert data["totalLines"] == 2
+    assert data["translatedLines"] == 2
+    assert data["language"] == "es"
+
+
+def test_inspect_reports_a_partial_translation(client: httpx.Client, track: Path) -> None:
+    track.with_suffix(".lrc").write_text(
+        "[tr:es]\n[trsep: / ]\n[00:00.50]alpha / alfa\n[00:01.20]charlie\n", encoding="utf-8"
+    )
+    data = client.get("/api/inspect/0").json()
+    assert data["translatedLines"] == 1
+    assert data["totalLines"] == 2
+
+
+def test_saving_a_timing_fix_keeps_the_translation(client: httpx.Client, bilingual_track: Path) -> None:
+    """Regression: correcting a timing used to silently drop the second language."""
+    response = client.post("/api/track/0/save", json={"starts": [1.0, 2.0]})
+    assert response.status_code == 200
+
+    written = bilingual_track.with_suffix(".lrc").read_text(encoding="utf-8")
+    assert "[00:01.00]alpha bravo / alfa bravo" in written
+    assert "[00:02.00]charlie delta / charli delta" in written
+    assert "[tr:es]" in written, "the layout header must survive too"
+
+    reloaded = client.get("/api/track/0").json()
+    assert [line["translation"] for line in reloaded["lines"]] == ["alfa bravo", "charli delta"]
+
+
+def test_saving_preserves_a_stacked_layout(client: httpx.Client, track: Path) -> None:
+    """A file written line-apart must not come back joined on one line."""
+    track.with_suffix(".lrc").write_text(
+        "[tr:es]\n[00:00.50]alpha bravo\n[00:00.50]alfa bravo\n", encoding="utf-8"
+    )
+    client.get("/api/track/0")
+    assert client.post("/api/track/0/save", json={"starts": [1.0]}).status_code == 200
+
+    written = track.with_suffix(".lrc").read_text(encoding="utf-8")
+    assert "[00:01.00]alpha bravo" in written
+    assert "[00:01.00]alfa bravo" in written
+    assert "/" not in written, "an inline separator would change the layout"
+
+
+def test_saving_an_untranslated_track_adds_no_header(client: httpx.Client, track: Path) -> None:
+    client.post("/api/track/0/save", json={"starts": [1.0, 2.0]})
+    written = track.with_suffix(".lrc").read_text(encoding="utf-8")
+    assert "[tr:" not in written

@@ -271,6 +271,8 @@ class AppHandler(BaseHTTPRequestHandler):
             "lines": len(lyrics.timed_lines()) if lyrics else 0,
             "hasLyrics": bool(lyrics),
             "wordLevel": bool(lyrics and lyrics.word_level),
+            "translated": bool(lyrics and lyrics.translated),
+            "language": lyrics.translation_language if lyrics else None,
             "marker": read_marker(path),
             "lastStatus": _lookup(statuses, path),
             "lastMessage": _lookup(messages, path) or "",
@@ -302,9 +304,13 @@ class AppHandler(BaseHTTPRequestHandler):
             "duration": meta.duration,
             "source": lyrics.source.value if lyrics else None,
             "wordLevel": bool(lyrics and lyrics.word_level),
+            "translated": bool(lyrics and lyrics.translated),
+            "language": lyrics.translation_language if lyrics else None,
+            "bilingualStyle": lyrics.bilingual_style if lyrics else None,
             "lines": [
                 {
                     "text": line.text,
+                    "translation": line.translation,
                     "start": round(line.start, 3) if line.start is not None else None,
                     "end": round(line.end, 3) if line.end is not None else None,
                 }
@@ -315,6 +321,11 @@ class AppHandler(BaseHTTPRequestHandler):
     def _serve_inspect(self, index: int) -> None:
         path = self.server.tracks[index]
         text = read_embedded_lyrics(path)
+        lyrics = self.server.lyrics_for(index)
+
+        total = len(lyrics.lines) if lyrics else 0
+        translated = sum(1 for line in lyrics.lines if line.translation) if lyrics else 0
+
         self._send_json({
             "name": path.name,
             "path": str(path),
@@ -322,6 +333,13 @@ class AppHandler(BaseHTTPRequestHandler):
             "marker": read_marker(path),
             "sidecar": path.with_suffix(".lrc").exists(),
             "words": path.with_suffix(".words.json").exists(),
+            "manualTranslation": path.with_suffix(
+                f".{self.server.config.target_language}.txt"
+            ).exists(),
+            "totalLines": total,
+            "translatedLines": translated,
+            "language": lyrics.translation_language if lyrics else None,
+            "bilingualStyle": lyrics.bilingual_style if lyrics else None,
             "embedded": text,
         })
 

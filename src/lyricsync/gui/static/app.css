@@ -126,7 +126,12 @@ progress { flex: 1; height: 6px; accent-color: var(--accent); }
   font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted);
   flex-shrink: 0; width: 66px; font-variant-numeric: tabular-nums;
 }
-.ltext { flex: 1; }
+.ltext { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+/* The translation sits under the original, quieter, so the eye lands on the
+   English first and the Spanish is there when it is needed. */
+.ltext .translated { font-size: .88em; color: var(--muted); font-style: italic; }
+.line.active .ltext .translated { color: var(--text); opacity: .75; }
+.badge.chip { margin-left: 6px; font-size: 11px; }
 audio { height: 34px; flex: 1; min-width: 220px; }
 #offset {
   font-family: ui-monospace, Menlo, monospace; font-size: 13px;

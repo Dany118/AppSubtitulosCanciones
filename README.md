@@ -184,6 +184,20 @@ pip install -r requirements-translate.txt
 Las traducciones se cachean por línea, no por canción: un estribillo se traduce
 una sola vez, y si se repite en otra canción tampoco se recalcula.
 
+### Cómo saber si una canción está realmente traducida
+
+Tres sitios, de más rápido a más detallado:
+
+- **Biblioteca** — junto al estado aparece un chip `ES` si lleva traducción, o
+  *sin traducir* si no.
+- **Revisar** — la ves. Y la barra de estado dice cuántas líneas están
+  traducidas: `traducida (es): 24/24 líneas`.
+- **Inspeccionar** — la respuesta exacta: `sí — 24 de 24 líneas (es, misma
+  línea)`, y si hay un `.es.txt` tuyo al lado.
+
+Si una canción sale como `18/24`, la traducción está incompleta: el resto
+aparecerá solo en inglés.
+
 ### El archivo se puede volver a leer
 
 El `.lrc` guarda en su cabecera qué idioma y qué formato se usó (`[tr:]` y
@@ -215,9 +229,10 @@ El trabajo corre en segundo plano con barra de progreso y un registro en vivo
 línea a línea, y se puede **cancelar**: se detiene tras la pista en curso, sin
 dejar ningún archivo a medias.
 
-**Revisar** — el reproductor con la letra scrolleando y las mismas teclas de
-siempre (`←` `→` mueven toda la letra, `T` remarca una línea suelta, `Ctrl+S`
-guarda).
+**Revisar** — el reproductor con la letra scrolleando. Si la pista está
+traducida, cada línea muestra el original arriba y la traducción debajo. Las
+teclas de siempre (`←` `→` mueven toda la letra, `T` remarca una línea suelta,
+`Ctrl+S` guarda). Ajustar los tiempos **conserva la traducción y su formato**.
 
 **Inspeccionar** — qué frames tiene el MP3 ahora mismo, si hay sidecar, si hay
 tiempos por palabra, y la letra embebida tal cual.

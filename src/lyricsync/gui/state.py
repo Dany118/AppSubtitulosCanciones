@@ -17,6 +17,10 @@ class AppConfig:
     """Write settings, mirroring the pipeline's so both agree on output."""
 
     id3_version: int = 3
+    # Only used as a fallback: a file that already carries a layout in its
+    # header is re-rendered the way it was written.
+    bilingual: str = "inline"
+    target_language: str = "es"
     write_sidecar: bool = True
     enhanced_sidecar: bool = False
     write_sylt: bool = True
@@ -89,7 +93,8 @@ def apply_edits(lyrics: Lyrics, starts: list[float | None]) -> Lyrics:
     edited: list[LyricLine] = []
     for line, new_start in zip(lyrics.lines, starts):
         if new_start is None or line.start is None:
-            edited.append(LyricLine(line.text, line.start, line.end, list(line.words)))
+            edited.append(LyricLine(line.text, line.start, line.end, list(line.words),
+                                    translation=line.translation))
             continue
         delta = new_start - line.start
         edited.append(
@@ -99,6 +104,8 @@ def apply_edits(lyrics: Lyrics, starts: list[float | None]) -> Lyrics:
                 end=(line.end + delta) if line.end is not None else None,
                 words=[Word(w.text, max(0.0, w.start + delta), max(0.0, w.end + delta))
                        for w in line.words],
+                # Correcting a timing must never cost the translation.
+                translation=line.translation,
             )
         )
 
@@ -109,6 +116,8 @@ def apply_edits(lyrics: Lyrics, starts: list[float | None]) -> Lyrics:
         title=lyrics.title,
         artist=lyrics.artist,
         album=lyrics.album,
+        translation_language=lyrics.translation_language,
+        bilingual_style=lyrics.bilingual_style,
     )
 
 
@@ -121,10 +130,13 @@ def render(lyrics: Lyrics, meta: TrackMeta, config: AppConfig) -> str:
         "al": lyrics.album or meta.album or "",
         "tool": f"lyricsync {__version__}",
     }
+    # Reproduce the layout the file already had; fall back to the setting.
+    style = lyrics.bilingual_style or config.bilingual
     return format_lrc(
         lyrics,
         decimals=config.decimals,
         metadata={k: v for k, v in metadata.items() if v},
+        bilingual=style if lyrics.translated else "off",
     )
 
 
@@ -152,7 +164,9 @@ def save_track(path: Path, lyrics: Lyrics, config: AppConfig) -> dict:
 
     if config.write_sidecar:
         body = (
-            format_lrc(lyrics, enhanced=True, decimals=config.decimals)
+            format_lrc(lyrics, enhanced=True, decimals=config.decimals,
+                       bilingual=(lyrics.bilingual_style or config.bilingual)
+                       if lyrics.translated else "off")
             if config.enhanced_sidecar and lyrics.word_level
             else lrc_text
         )

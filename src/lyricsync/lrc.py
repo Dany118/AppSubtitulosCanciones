@@ -101,15 +101,20 @@ def parse_lrc(content: str) -> Lyrics:
             )
 
     lines.sort(key=lambda ln: (ln.start if ln.start is not None else 0.0))
+
+    separator = meta.get("trsep")
     if "tr" in meta:
-        _unmerge_translations(lines, meta.get("trsep"))
+        _unmerge_translations(lines, separator)
     _fill_line_ends(lines)
+
     return Lyrics(
         lines=lines,
         source=Source.LOCAL_LRC,
         title=meta.get("ti"),
         artist=meta.get("ar"),
         album=meta.get("al"),
+        translation_language=meta.get("tr"),
+        bilingual_style=("inline" if separator else "stacked") if "tr" in meta else None,
     )
 
 
@@ -249,7 +254,8 @@ def format_lrc(
 
     # Record the layout so the file can be read back apart again.
     if bilingual != "off" and lyrics.translated:
-        out.append(f"[tr:{(metadata or {}).get('tr', 'translated')}]")
+        language = (metadata or {}).get("tr") or lyrics.translation_language or "translated"
+        out.append(f"[tr:{language}]")
         if bilingual == "inline":
             out.append(f"[trsep:{separator}]")
 

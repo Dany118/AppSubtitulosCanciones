@@ -11,7 +11,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
-from .lrc import format_lrc
+from .lrc import BILINGUAL_STYLES, format_lrc
 from .models import LyricLine, Lyrics, ProcessResult, Source, Status, Word
 from .pipeline import Config, Pipeline, find_tracks
 from .store import Store
@@ -38,6 +38,10 @@ def sync(
     demucs: bool = typer.Option(True, "--demucs/--no-demucs", help="Isolate vocals before aligning (much more accurate)."),
     enhanced: bool = typer.Option(False, "--enhanced", help="Write a word-level .lrc sidecar (Poweramp, Salt Player)."),
     sidecar: bool = typer.Option(True, "--sidecar/--no-sidecar", help="Write a .lrc file next to the MP3."),
+    embed: bool = typer.Option(False, "--embed", help="Also write the lyrics into the MP3 tags. Off by default: players prefer the .lrc."),
+    translate: bool = typer.Option(False, "--translate", help="Add a translation beside each original line."),
+    language: str = typer.Option("es", "--lang", help="Target language for --translate."),
+    bilingual: str = typer.Option("inline", "--bilingual", help="How to lay out a translation: inline or stacked."),
     lead_in: float = typer.Option(0.0, "--lead-in", help="Show each line this many seconds early."),
     id3: int = typer.Option(3, "--id3", help="ID3 version to save: 3 (widest Android support) or 4."),
     offline: bool = typer.Option(False, "--offline", help="Do not query LRCLIB; use local files only."),
@@ -56,10 +60,18 @@ def sync(
         console.print("[red]No MP3 files found.[/red]")
         raise typer.Exit(1)
 
+    if bilingual not in BILINGUAL_STYLES:
+        console.print(f"[red]--bilingual must be one of: {', '.join(BILINGUAL_STYLES)}[/red]")
+        raise typer.Exit(2)
+
     config = Config(
         device=device,
         id3_version=id3,
         write_sidecar=sidecar,
+        sidecar_only=not embed,
+        translate=translate,
+        target_language=language,
+        bilingual=bilingual,
         enhanced_sidecar=enhanced,
         lead_in=lead_in,
         separate_vocals=demucs,

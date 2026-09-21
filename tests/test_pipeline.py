@@ -14,6 +14,7 @@ from mutagen.id3 import ID3, TIT2, TPE1
 
 from lyricsync.models import LyricLine, Lyrics, Source, Status
 from lyricsync.pipeline import Config, Pipeline, find_tracks
+from lyricsync.lrc import read_tool_tag
 from lyricsync.tags import read_embedded_lyrics, read_marker
 from lyricsync.validate import validate_timing
 from conftest import build_mp3_bytes
@@ -38,27 +39,57 @@ def offline_config() -> Config:
 
 
 @pytest.fixture
+def embedding_config(offline_config: Config) -> Config:
+    """Same, but writing into the MP3 as well as the sidecar."""
+    offline_config.sidecar_only = False
+    return offline_config
+
+
+@pytest.fixture
 def track(tmp_path: Path) -> Path:
     path = tagged_mp3(tmp_path / "track.mp3")
     path.with_suffix(".lrc").write_text(SHORT_LRC, encoding="utf-8")
     return path
 
 
-def test_embeds_lyrics_from_sidecar(track: Path, offline_config: Config) -> None:
+def test_writes_the_sidecar_without_touching_the_mp3(track: Path, offline_config: Config) -> None:
+    """The default mode writes only the .lrc, which is what players prefer."""
+    before = track.read_bytes()
     result = Pipeline(offline_config).process(track)
 
     assert result.status is Status.OK, result.message
     assert result.line_count == 2
 
+    sidecar = track.with_suffix(".lrc").read_text(encoding="utf-8")
+    assert "[00:00.50]alpha bravo" in sidecar
+    assert "[ti:Placeholder Title]" in sidecar, "metadata header should be written"
+    assert track.read_bytes() == before, "the MP3 must not be rewritten"
+    assert read_embedded_lyrics(track) is None
+
+
+def test_embeds_into_the_mp3_when_asked(track: Path, embedding_config: Config) -> None:
+    result = Pipeline(embedding_config).process(track)
+
+    assert result.status is Status.OK, result.message
     embedded = read_embedded_lyrics(track)
     assert embedded is not None
     assert "[00:00.50]alpha bravo" in embedded
-    assert "[ti:Placeholder Title]" in embedded, "metadata header should be written"
+    assert "[ti:Placeholder Title]" in embedded
 
 
-def test_marker_makes_a_second_run_a_no_op(track: Path, offline_config: Config) -> None:
-    Pipeline(offline_config).process(track)
+def test_embedded_marker_makes_a_second_run_a_no_op(track: Path, embedding_config: Config) -> None:
+    Pipeline(embedding_config).process(track)
     assert read_marker(track) is not None
+
+    again = Pipeline(embedding_config).process(track)
+    assert again.status is Status.SKIPPED
+
+
+def test_sidecar_only_run_is_still_idempotent(track: Path, offline_config: Config) -> None:
+    """With nothing written to the MP3, the .lrc header carries the marker."""
+    Pipeline(offline_config).process(track)
+    assert read_marker(track) is None, "nothing should have been written to the MP3"
+    assert read_tool_tag(track.with_suffix(".lrc")) is not None
 
     again = Pipeline(offline_config).process(track)
     assert again.status is Status.SKIPPED
@@ -71,12 +102,14 @@ def test_force_reprocesses_a_marked_file(track: Path, offline_config: Config) ->
 
 
 def test_dry_run_writes_nothing(track: Path, offline_config: Config) -> None:
+    original = track.with_suffix(".lrc").read_text(encoding="utf-8")
     offline_config.dry_run = True
     result = Pipeline(offline_config).process(track)
 
     assert result.status is Status.OK
     assert read_embedded_lyrics(track) is None
     assert read_marker(track) is None
+    assert track.with_suffix(".lrc").read_text(encoding="utf-8") == original
 
 
 def test_untagged_file_fails_with_a_clear_message(tmp_path: Path, offline_config: Config) -> None:
@@ -119,16 +152,16 @@ def test_sidecar_is_rewritten_in_canonical_form(track: Path, offline_config: Con
     assert "[00:00.50]alpha bravo" in sidecar
 
 
-def test_no_sidecar_when_disabled(tmp_path: Path, offline_config: Config) -> None:
+def test_no_sidecar_when_disabled(tmp_path: Path, embedding_config: Config) -> None:
     path = tagged_mp3(tmp_path / "nosidecar.mp3")
-    offline_config.write_sidecar = False
+    embedding_config.write_sidecar = False
     # Provide lyrics through the embedded frame so no .lrc file is involved.
     from lyricsync.tags import write_lyrics
 
     write_lyrics(path, SHORT_LRC)
-    offline_config.force = True
+    embedding_config.force = True
 
-    assert Pipeline(offline_config).process(path).status is Status.OK
+    assert Pipeline(embedding_config).process(path).status is Status.OK
     assert not path.with_suffix(".lrc").exists()
 
 

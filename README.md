@@ -29,11 +29,13 @@ milisegundos; sobre una voz limpia baja a decenas.
 
 ### Formato de salida
 
-- **`USLT`** con el texto LRC dentro → es el frame que los reproductores Android
-  leen de verdad (el `SYLT` "oficial" casi nadie lo soporta; se escribe igual por
-  si acaso).
-- **`.lrc` hermano** junto al MP3 → el formato más universal y el más fácil de
-  corregir a mano.
+- **`.lrc` hermano** junto al MP3 → el formato más universal, el más fácil de
+  corregir a mano, y el que los reproductores prefieren cuando existe. **Es la
+  salida por defecto, y no toca el MP3 en absoluto.**
+- **`USLT`** con el texto LRC dentro, solo si lo pides (`--embed`, o
+  desmarcando *Solo generar el .lrc*) → es el frame que los reproductores
+  Android leen cuando no hay `.lrc` (el `SYLT` "oficial" casi nadie lo
+  soporta; se escribe igual por si acaso).
 - **`.words.json`** → los tiempos por palabra. Calcularlos es lo caro; guardarlos
   significa que cambiar entre salida por línea y por palabra después no cuesta nada.
 - ID3v2.3 por defecto (mejor compatibilidad con Android que v2.4).
@@ -141,6 +143,54 @@ lyricsync gui
 | `--force` | Reprocesa archivos ya marcados por lyricsync. |
 | `--dry-run` | Informa de lo que pasaría, sin escribir nada. |
 | `--limit 10` | Prueba con las 10 primeras antes de lanzar el lote entero. |
+
+---
+
+## Traducción: inglés y español a la vez
+
+Pensado para leer: cada línea original acompañada de su traducción.
+
+```bash
+lyricsync sync ~/Musica --translate
+lyricsync sync ~/Musica --translate --bilingual stacked
+```
+
+En la interfaz es la casilla **Traducción al español**, con un desplegable de
+formato al lado.
+
+LRC no tiene un campo nativo para un segundo idioma, así que hay dos
+convenciones y cada reproductor se lleva mejor con una:
+
+| Formato | Cómo queda | Cuándo usarlo |
+|---------|-----------|---------------|
+| `inline` (misma línea) | `[00:12.34]the original line / la línea traducida` | Funciona en cualquier reproductor, porque es una línea de texto normal |
+| `stacked` (línea aparte) | dos líneas con la misma marca de tiempo | Se lee mejor en el móvil, si tu reproductor muestra líneas consecutivas |
+
+**Prueba las dos en tu reproductor.** Cuál se ve mejor no lo puede decidir el
+código.
+
+### De dónde sale la traducción
+
+1. **Un archivo tuyo**, `cancion.es.txt`, una línea por línea de letra. Si
+   existe, gana siempre — así puedes corregir a mano y la siguiente ejecución
+   no te lo pisa.
+2. **Un modelo local** (Helsinki-NLP opus-mt). Sin clave de API y sin conexión
+   después de la primera descarga:
+
+```bash
+pip install -r requirements-translate.txt
+```
+
+Las traducciones se cachean por línea, no por canción: un estribillo se traduce
+una sola vez, y si se repite en otra canción tampoco se recalcula.
+
+### El archivo se puede volver a leer
+
+El `.lrc` guarda en su cabecera qué idioma y qué formato se usó (`[tr:]` y
+`[trsep:]`), así que al reprocesar la canción el programa vuelve a separar las
+dos lenguas en vez de tratar la línea mezclada como si fuera el original. Sin
+eso, cada ejecución le añadiría la traducción otra vez.
+
 
 ---
 

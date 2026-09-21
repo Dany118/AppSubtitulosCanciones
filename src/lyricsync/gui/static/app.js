@@ -244,6 +244,9 @@ function syncOptions() {
     enhanced: $("o-enhanced").checked,
     device: $("o-device").value,
     leadIn: parseFloat($("o-lead").value) || 0,
+    sidecarOnly: $("o-sidecaronly").checked,
+    translate: $("o-translate").checked,
+    bilingual: $("o-bilingual").value,
   };
 }
 

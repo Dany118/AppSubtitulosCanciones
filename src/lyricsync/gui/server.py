@@ -567,6 +567,10 @@ class AppHandler(BaseHTTPRequestHandler):
             enhanced_sidecar=bool(options.get("enhanced", False)),
             lead_in=float(options.get("leadIn", 0.0) or 0.0),
             id3_version=self.server.config.id3_version,
+            sidecar_only=bool(options.get("sidecarOnly", True)),
+            translate=bool(options.get("translate", False)),
+            target_language=str(options.get("language", "es")),
+            bilingual=str(options.get("bilingual", "inline")),
         )
         # One pipeline for the whole job so the alignment model loads once.
         store = self.server.store()

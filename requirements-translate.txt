@@ -1,0 +1,13 @@
+# Traduccion automatica local (ingles -> espanol u otro idioma).
+# El modelo son unos cientos de MB y se descarga la primera vez.
+# No necesita clave de API ni conexion despues de la primera descarga.
+#
+#   pip install -r requirements-translate.txt
+#
+# Si ya instalaste requirements-align.txt, torch ya esta y esto es pequeno.
+
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+torch>=2.1
+transformers>=4.40
+sentencepiece>=0.2

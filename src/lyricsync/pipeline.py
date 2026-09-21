@@ -22,7 +22,10 @@ from .align.forced import AlignmentError, ForcedAligner
 from .audio import AudioError, decode_mono, separate_vocals, vocal_onset
 from .lrc import attach_words, format_lrc, to_sylt
 from .models import Lyrics, ProcessResult, Source, Status, TrackMeta, Word
+from .lrc import read_tool_tag
 from .providers import EmbeddedProvider, LocalFileProvider, LrclibProvider
+from .translate.local import MarianTranslator, TranslationError
+from .translate.sidecar import SidecarTranslator
 from .store import Store, cache_key
 from .tags import read_marker, read_meta, write_lyrics
 from .text import is_annotation, split_words
@@ -43,11 +46,19 @@ class Config:
     # Output
     id3_version: int = 3           # v2.3 is the safest for Android players
     write_sidecar: bool = True     # <track>.lrc next to the file
+    # Players prefer the sidecar when both exist, so writing only the .lrc is
+    # the default: it gets the same result without rewriting the audio file.
+    sidecar_only: bool = True
     enhanced_sidecar: bool = False # word-level LRC (Poweramp / Salt Player)
     write_sylt: bool = True
     write_words_json: bool = True  # keeps word timings for later re-export
     lead_in: float = 0.0           # show each line this many seconds early
     decimals: int = 2
+
+    # Translation
+    translate: bool = False
+    target_language: str = "es"
+    bilingual: str = "inline"      # see lrc.BILINGUAL_STYLES
 
     # Behaviour
     separate_vocals: bool = True
@@ -66,6 +77,7 @@ class Pipeline:
         self.config = config
         self.store = store
         self._aligner: ForcedAligner | None = None
+        self._translator: MarianTranslator | None = None
         self._lrclib = LrclibProvider() if config.use_network else None
         self._local = LocalFileProvider()
         self._embedded = EmbeddedProvider()
@@ -140,6 +152,60 @@ class Pipeline:
         attach_words(lyrics, aligned)
         return warnings
 
+    # ------------------------------------------------------------ translate
+
+    def _get_translator(self) -> MarianTranslator:
+        if self._translator is None:
+            self._translator = MarianTranslator(
+                target_language=self.config.target_language, device=self.config.device
+            )
+        return self._translator
+
+    def translate(self, meta: TrackMeta, lyrics: Lyrics) -> list[str]:
+        """Attach a translation to each line. Returns warnings.
+
+        A hand-written sidecar wins over the model: if you corrected a
+        translation, a later run must not overwrite it. Otherwise the cache is
+        consulted first, since a chorus repeats within and across tracks, and
+        only the genuinely new lines reach the model.
+        """
+        if not self.config.translate:
+            return []
+
+        lang = self.config.target_language
+        lines = [line for line in lyrics.lines if not line.is_blank]
+        if not lines:
+            return []
+        texts = [line.text for line in lines]
+
+        sidecar = SidecarTranslator(meta.path, lang)
+        if sidecar.available():
+            for line, text in zip(lines, sidecar.translate(texts)):
+                line.translation = text or None
+            missing = sum(1 for line in lines if not line.translation)
+            return [f"{missing} line(s) missing from {sidecar.path.name}"] if missing else []
+
+        cached = {}
+        if self.store is not None:
+            cached = self.store.get_translations(texts, lang)
+
+        pending = [text for text in dict.fromkeys(texts) if text not in cached]
+        if pending:
+            try:
+                fresh = self._get_translator().translate(pending)
+            except TranslationError as exc:
+                return [f"translation unavailable: {exc}"]
+            new_pairs = dict(zip(pending, fresh))
+            cached.update(new_pairs)
+            if self.store is not None:
+                self.store.put_translations(new_pairs, lang)
+
+        for line in lines:
+            line.translation = cached.get(line.text) or None
+
+        missing = sum(1 for line in lines if not line.translation)
+        return [f"{missing} line(s) could not be translated"] if missing else []
+
     def _onset(self, meta: TrackMeta, work_dir: Path) -> float | None:
         """Detect when singing starts, for the timing plausibility check."""
         try:
@@ -160,34 +226,44 @@ class Pipeline:
             "ar": lyrics.artist or meta.artist or "",
             "al": lyrics.album or meta.album or "",
             "tool": f"lyricsync {__version__}",
+            "tr": self.config.target_language,
         }
         return format_lrc(
             lyrics,
             decimals=self.config.decimals,
             lead_in=self.config.lead_in,
             metadata={k: v for k, v in metadata.items() if v},
+            bilingual=self.config.bilingual if lyrics.translated else "off",
         )
 
     def write(self, meta: TrackMeta, lyrics: Lyrics, lrc_text: str) -> None:
-        write_lyrics(
-            meta.path,
-            lrc_text,
-            sylt_pairs=to_sylt(lyrics) if self.config.write_sylt else None,
-            plain_fallback=None,
-            id3_version=self.config.id3_version,
-            backup=self.config.backup,
-            marker=f"lyricsync/{__version__}/{lyrics.source.value}",
-        )
+        # Sidecar-only leaves the MP3 completely untouched: no tag rewrite, no
+        # risk to the audio file. The sidecar is then the only output, so it
+        # is written regardless of write_sidecar.
+        if not self.config.sidecar_only:
+            write_lyrics(
+                meta.path,
+                lrc_text,
+                sylt_pairs=to_sylt(lyrics) if self.config.write_sylt else None,
+                plain_fallback=None,
+                id3_version=self.config.id3_version,
+                backup=self.config.backup,
+                marker=f"lyricsync/{__version__}/{lyrics.source.value}",
+            )
 
-        if self.config.write_sidecar:
-            sidecar = meta.path.with_suffix(".lrc")
+        if self.config.write_sidecar or self.config.sidecar_only:
             body = (
-                format_lrc(lyrics, enhanced=True, decimals=self.config.decimals,
-                           lead_in=self.config.lead_in)
+                format_lrc(
+                    lyrics,
+                    enhanced=True,
+                    decimals=self.config.decimals,
+                    lead_in=self.config.lead_in,
+                    bilingual=self.config.bilingual if lyrics.translated else "off",
+                )
                 if self.config.enhanced_sidecar and lyrics.word_level
                 else lrc_text
             )
-            sidecar.write_text(body, encoding="utf-8")
+            meta.path.with_suffix(".lrc").write_text(body, encoding="utf-8")
 
         if self.config.write_words_json and lyrics.word_level:
             payload = {
@@ -196,6 +272,7 @@ class Pipeline:
                 "lines": [
                     {
                         "text": line.text,
+                        "translation": line.translation,
                         "start": round(line.start, 3) if line.start is not None else None,
                         "end": round(line.end, 3) if line.end is not None else None,
                         "words": [[w.text, round(w.start, 3), round(w.end, 3)] for w in line.words],
@@ -216,7 +293,9 @@ class Pipeline:
             return ProcessResult(path, Status.FAILED, message=f"unreadable MP3: {exc}")
 
         if not self.config.force:
-            marker = read_marker(path)
+            # In sidecar-only mode nothing is written to the MP3, so the
+            # "already processed" signal lives in the .lrc header instead.
+            marker = read_marker(path) or read_tool_tag(path.with_suffix(".lrc"))
             if marker:
                 return ProcessResult(path, Status.SKIPPED, message=f"already processed ({marker})")
 
@@ -254,12 +333,17 @@ class Pipeline:
                 return ProcessResult(path, Status.FAILED, source=lyrics.source,
                                      message="; ".join(report.errors), warnings=report.warnings)
             warnings += report.warnings
+            warnings += self.translate(meta, lyrics)
 
             lrc_text = self.render(lyrics, meta)
             if not self.config.dry_run:
                 self.write(meta, lyrics, lrc_text)
                 if self.store is not None:
-                    self.store.put_lyrics(cache_key(meta), lyrics, lrc_text)
+                    # Canonical form only: translations live in their own
+                    # cache and are re-attached on the next run.
+                    self.store.put_lyrics(
+                        cache_key(meta), lyrics, format_lrc(lyrics, bilingual="off")
+                    )
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -302,6 +386,7 @@ class Pipeline:
             return ProcessResult(meta.path, Status.FAILED, source=Source.ASR,
                                  message="; ".join(report.errors))
 
+        asr_warnings = self.translate(meta, lyrics)
         lrc_text = self.render(lyrics, meta)
         if not self.config.dry_run:
             self.write(meta, lyrics, lrc_text)
@@ -309,7 +394,8 @@ class Pipeline:
         # Machine-transcribed words are never trusted without a listen.
         return ProcessResult(
             meta.path, Status.REVIEW, source=Source.ASR,
-            warnings=["transcribed by ASR, wording needs checking", *report.warnings],
+            warnings=["transcribed by ASR, wording needs checking",
+                      *report.warnings, *asr_warnings],
             line_count=len(lyrics.timed_lines()), word_level=lyrics.word_level,
         )
 

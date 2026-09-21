@@ -25,7 +25,13 @@ align = [
     "demucs>=4.0",
     "faster-whisper>=1.0",
 ]
-dev = ["pytest>=8.0"]
+# Local machine translation for the bilingual output.
+translate = [
+    "torch>=2.1",
+    "transformers>=4.40",
+    "sentencepiece>=0.2",
+]
+dev = ["pytest>=8.0", "pyinstaller>=6.0"]
 
 [project.scripts]
 lyricsync = "lyricsync.cli:app"

@@ -335,7 +335,8 @@ def test_sync_job_runs_offline(client: httpx.Client, track: Path) -> None:
     job = wait_for_job(client, started.json()["id"])
     assert job["status"] == "finished"
     assert job["events"][0]["status"] == "ok"
-    assert read_embedded_lyrics(track) is not None
+    # The default mode writes the sidecar and leaves the MP3 alone.
+    assert "[00:00.50]alpha bravo" in track.with_suffix(".lrc").read_text(encoding="utf-8")
 
 
 def test_job_defaults_to_the_whole_library(client: httpx.Client) -> None:

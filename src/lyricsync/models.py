@@ -40,6 +40,8 @@ class LyricLine:
     start: float | None = None
     end: float | None = None
     words: list[Word] = field(default_factory=list)
+    # The same line in the reader's own language, when translation is on.
+    translation: str | None = None
 
     @property
     def is_blank(self) -> bool:
@@ -70,6 +72,10 @@ class Lyrics:
     @property
     def plain_text(self) -> str:
         return "\n".join(line.text for line in self.lines)
+
+    @property
+    def translated(self) -> bool:
+        return any(line.translation for line in self.lines)
 
     def timed_lines(self) -> list[LyricLine]:
         return [line for line in self.lines if line.start is not None]

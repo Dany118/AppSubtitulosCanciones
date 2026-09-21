@@ -32,7 +32,23 @@ CREATE TABLE IF NOT EXISTS runs (
     ran_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS runs_path_idx ON runs(path);
+CREATE TABLE IF NOT EXISTS translations (
+    key     TEXT PRIMARY KEY,
+    lang    TEXT NOT NULL,
+    source  TEXT NOT NULL,
+    target  TEXT NOT NULL,
+    made_at REAL NOT NULL
+);
 """
+
+
+def translation_key(text: str, lang: str) -> str:
+    """Identify a line of text in a target language.
+
+    Keyed on the text itself, not on the track: a chorus repeats within a song
+    and across a library, and translating it once is the whole point.
+    """
+    return hashlib.sha1(f"{lang}|{text.strip()}".encode("utf-8")).hexdigest()
 
 
 def cache_key(meta: TrackMeta) -> str:
@@ -94,6 +110,39 @@ class Store:
                 "INSERT INTO runs VALUES (?, ?, ?, ?, ?)",
                 (str(path), status, source, message, time.time()),
             )
+            conn.commit()
+
+    def get_translations(self, texts: list[str], lang: str) -> dict[str, str]:
+        """Return the cached translation for each text that has one."""
+        if not texts:
+            return {}
+        keys = {translation_key(text, lang): text for text in texts}
+        found: dict[str, str] = {}
+        with closing(self._connect()) as conn:
+            # Chunked to stay under SQLite's variable limit on a long track.
+            key_list = list(keys)
+            for start in range(0, len(key_list), 400):
+                chunk = key_list[start : start + 400]
+                placeholders = ",".join("?" * len(chunk))
+                rows = conn.execute(
+                    f"SELECT key, target FROM translations WHERE key IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+                for row in rows:
+                    found[keys[row["key"]]] = row["target"]
+        return found
+
+    def put_translations(self, pairs: dict[str, str], lang: str) -> None:
+        """Store translations, skipping empty results."""
+        rows = [
+            (translation_key(source, lang), lang, source, target, time.time())
+            for source, target in pairs.items()
+            if target.strip()
+        ]
+        if not rows:
+            return
+        with closing(self._connect()) as conn:
+            conn.executemany("INSERT OR REPLACE INTO translations VALUES (?, ?, ?, ?, ?)", rows)
             conn.commit()
 
     def latest_statuses(self) -> dict[str, str]:

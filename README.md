@@ -46,24 +46,59 @@ regenera el `.lrc` con resaltado palabra por palabra sin reprocesar el audio.
 
 ## Instalación
 
-Requiere **Python 3.10+** y **ffmpeg** en el PATH.
+### Windows (lo más sencillo)
+
+1. Instala **Python 3.10 o superior** desde [python.org](https://www.python.org/downloads/).
+   Marca la casilla *"Add Python to PATH"* durante la instalación.
+2. Descarga este repositorio y descomprímelo.
+3. Doble clic en **`install.bat`**.
+4. Doble clic en **`lyricsync.bat`** para abrir la aplicación.
+
+El instalador te preguntará si quieres añadir también la parte de GPU
+(alineación forzada y transcripción). Puedes decir que no y añadirla después.
+
+### Linux y macOS
 
 ```bash
 git clone https://github.com/Dany118/AppSubtitulosCanciones
 cd AppSubtitulosCanciones
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+./install.sh
+./lyricsync.sh
 ```
 
-Eso ya te da la estrategia 1 (sin ML, sin GPU).
-
-Para las estrategias 2 y 3, instala PyTorch con la rueda CUDA que corresponda a
-tu driver y luego el extra:
+### A mano
 
 ```bash
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-pip install -e ".[align]"
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt    # o: pip install -e .
+lyricsync gui
 ```
+
+### Archivos de dependencias
+
+| Archivo | Qué instala |
+|---------|-------------|
+| `requirements.txt` | El núcleo: interfaz, etiquetas, búsqueda de letras ya sincronizadas. Sin GPU. |
+| `requirements-align.txt` | PyTorch, Demucs y Whisper para la alineación forzada. Varios GB, requiere ffmpeg. |
+| `requirements-dev.txt` | Tests y construcción del ejecutable. |
+
+### Ejecutable autónomo
+
+Para tener un `.exe` que funcione en un PC **sin Python instalado**:
+
+```
+build_exe.bat          (Windows)
+pyinstaller lyricsync.spec   (cualquier sistema)
+```
+
+Deja un único archivo en `dist/`. Al ejecutarlo abre la interfaz directamente.
+
+Incluye la interfaz completa y la búsqueda de letras ya sincronizadas, que es
+la ruta que resuelve la mayoría de una biblioteca en inglés. **No incluye la
+alineación con GPU**: empaquetar PyTorch, CUDA y los modelos convertiría una
+descarga de ~25 MB en varios gigabytes, y un ejecutable congelado no tiene pip
+para descargar modelos después. Para esa parte usa la instalación normal.
 
 ---
 
@@ -223,7 +258,7 @@ src/lyricsync/
 ## Desarrollo
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
 pytest
 ```
 

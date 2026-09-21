@@ -1,0 +1,14 @@
+# Alineación forzada y transcripción (las estrategias 2 y 3 del pipeline).
+# Pesado: descarga varios GB. Requiere además ffmpeg en el PATH.
+#
+#   pip install -r requirements-align.txt
+#
+# El índice extra sirve las ruedas de PyTorch con CUDA 12.4. Si tu driver es
+# más antiguo, cambia cu124 por cu121. Para CPU, usa el índice /whl/cpu.
+
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+torch>=2.1
+torchaudio>=2.1
+demucs>=4.0
+faster-whisper>=1.0

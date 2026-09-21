@@ -26,12 +26,13 @@ from urllib.parse import unquote, urlparse
 from ..lrc import format_lrc
 from ..models import Lyrics, Status
 from ..pipeline import Config, Pipeline, find_tracks
+from ..resources import resource_dir
 from ..store import Store
 from ..tags import clear_lyrics, describe_lyric_frames, read_embedded_lyrics, read_marker
 from .jobs import JobRunner
 from .state import AppConfig, apply_edits, load_track, save_track
 
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = resource_dir("gui", "static")
 MAX_BODY_BYTES = 4 * 1024 * 1024
 _RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 

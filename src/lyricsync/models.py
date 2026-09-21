@@ -64,6 +64,9 @@ class Lyrics:
     # was written with, instead of silently dropping the second language.
     translation_language: str | None = None
     bilingual_style: str | None = None
+    # Seconds the stacked translation line sits after its original. None
+    # means the file said nothing, so the current setting applies.
+    translation_offset: float | None = None
 
     @property
     def synced(self) -> bool:

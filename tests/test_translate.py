@@ -54,10 +54,35 @@ def lyric_lines(rendered: str) -> list[str]:
     return [line for line in rendered.strip().splitlines() if line.startswith("[0")]
 
 
-def test_stacked_style_emits_two_lines_sharing_a_timestamp() -> None:
+def test_stacked_style_separates_the_two_timestamps() -> None:
+    """They must not collide: players that key lyrics by time drop one."""
     out = lyric_lines(format_lrc(bilingual_lyrics(), bilingual="stacked"))
+
     assert out[0] == "[00:01.00]alpha bravo"
-    assert out[1] == "[00:01.00]alfa bravo"
+    assert out[1] == "[00:01.05]alfa bravo"
+
+
+def test_stacked_offset_is_configurable() -> None:
+    out = lyric_lines(format_lrc(bilingual_lyrics(), bilingual="stacked",
+                                 translation_offset=0.2))
+    assert out[1] == "[00:01.20]alfa bravo"
+
+
+def test_stacked_offset_survives_binary_rounding() -> None:
+    """Regression: truncating start+offset could lose a hundredth.
+
+    The written gap then no longer matched the declared one, and reading the
+    file back failed to pair the translation with its line.
+    """
+    lyrics = Lyrics(
+        [LyricLine(f"line {i}", float(i), translation=f"linea {i}") for i in range(1, 40)],
+        Source.LOCAL_LRC,
+    )
+    rendered = format_lrc(lyrics, bilingual="stacked", metadata=META)
+    back = parse_lrc(rendered)
+
+    assert len(back.lines) == 39, "every line must pair with its translation"
+    assert all(line.translation for line in back.lines)
 
 
 def test_off_style_drops_the_translation() -> None:
@@ -263,6 +288,25 @@ def test_reprocessing_does_not_compound_the_translation(style: str) -> None:
     assert third == second
     assert "alfa bravo / alfa bravo" not in second
     assert second.count("alfa bravo") == 1
+
+
+def test_header_records_the_stacked_offset() -> None:
+    rendered = format_lrc(bilingual_lyrics(), bilingual="stacked", translation_offset=0.05)
+    assert "[troff:50]" in rendered
+
+
+def test_a_legacy_file_without_an_offset_is_upgraded() -> None:
+    """Files written before the offset existed carry the broken collision."""
+    back = parse_lrc("[tr:es]\n[00:01.00]alpha bravo\n[00:01.00]alfa bravo\n")
+
+    assert back.lines[0].translation == "alfa bravo", "it still reads back correctly"
+    assert back.translation_offset is None, "no opinion recorded, so the setting applies"
+
+
+def test_an_explicit_offset_is_preserved() -> None:
+    back = parse_lrc("[tr:es]\n[troff:120]\n[00:01.00]alpha\n[00:01.12]alfa\n")
+    assert back.translation_offset == pytest.approx(0.12)
+    assert back.lines[0].translation == "alfa"
 
 
 def test_header_records_the_layout() -> None:

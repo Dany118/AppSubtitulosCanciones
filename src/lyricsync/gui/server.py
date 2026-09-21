@@ -589,6 +589,7 @@ class AppHandler(BaseHTTPRequestHandler):
             translate=bool(options.get("translate", False)),
             target_language=str(options.get("language", "es")),
             bilingual=str(options.get("bilingual", "inline")),
+            translation_offset=max(0.0, float(options.get("translationOffset", 0.05) or 0.0)),
         )
         # One pipeline for the whole job so the alignment model loads once.
         store = self.server.store()

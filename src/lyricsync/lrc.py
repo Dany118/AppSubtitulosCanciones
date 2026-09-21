@@ -28,7 +28,7 @@ _META_RE = re.compile(r"^\[([a-zA-Z]{2,10}):(.*)\]\s*$")
 _KNOWN_META = {"ti", "ar", "al", "au", "by", "length", "offset", "re", "ve", "tool",
                # Written by us so a bilingual file can be read back apart
                # again: the target language, and the inline separator used.
-               "tr", "trsep"}
+               "tr", "trsep", "troff"}
 
 
 def _parse_stamp(minutes: str, seconds: str) -> float:
@@ -36,14 +36,21 @@ def _parse_stamp(minutes: str, seconds: str) -> float:
     return int(minutes) * 60 + float(seconds)
 
 
-def _format_stamp(value: float, decimals: int = 2) -> str:
-    """Format seconds as ``mm:ss.xx``, truncating so a line never shows late."""
-    value = max(0.0, value)
+def _ticks(value: float, decimals: int) -> int:
+    """Seconds to whole stamp units, truncating so a line never shows late."""
+    return max(0, int(max(0.0, value) * 10**decimals))
+
+
+def _format_ticks(ticks: int, decimals: int) -> str:
     scale = 10**decimals
-    total = int(value * scale)  # truncate, do not round up
-    minutes, rem = divmod(total, 60 * scale)
+    minutes, rem = divmod(max(0, ticks), 60 * scale)
     whole, frac = divmod(rem, scale)
     return f"{minutes:02d}:{whole:02d}.{frac:0{decimals}d}"
+
+
+def _format_stamp(value: float, decimals: int = 2) -> str:
+    """Format seconds as ``mm:ss.xx``."""
+    return _format_ticks(_ticks(value, decimals), decimals)
 
 
 def parse_lrc(content: str) -> Lyrics:
@@ -103,8 +110,14 @@ def parse_lrc(content: str) -> Lyrics:
     lines.sort(key=lambda ln: (ln.start if ln.start is not None else 0.0))
 
     separator = meta.get("trsep")
+    offset: float | None = None
+    if "troff" in meta:
+        try:
+            offset = int(meta["troff"]) / 1000.0
+        except ValueError:
+            offset = None
     if "tr" in meta:
-        _unmerge_translations(lines, separator)
+        _unmerge_translations(lines, separator, offset or 0.0)
     _fill_line_ends(lines)
 
     return Lyrics(
@@ -115,6 +128,7 @@ def parse_lrc(content: str) -> Lyrics:
         album=meta.get("al"),
         translation_language=meta.get("tr"),
         bilingual_style=("inline" if separator else "stacked") if "tr" in meta else None,
+        translation_offset=offset,
     )
 
 
@@ -141,7 +155,9 @@ def _parse_word_tags(body: str) -> tuple[list[Word], str]:
     return words, _WORD_TIME_RE.sub("", body)
 
 
-def _unmerge_translations(lines: list[LyricLine], separator: str | None) -> None:
+def _unmerge_translations(
+    lines: list[LyricLine], separator: str | None, offset: float = 0.0
+) -> None:
     """Recover the original text and its translation from a file we wrote.
 
     Rendering is lossy on its own -- once the two languages are in the file
@@ -160,13 +176,24 @@ def _unmerge_translations(lines: list[LyricLine], separator: str | None) -> None
                 line.translation = translation.strip() or None
         return
 
-    # Stacked: the translation is the following line at the same timestamp.
+    # Stacked: the translation is the next line, sitting exactly ``offset``
+    # after its original. Matching on that exact gap rather than a loose
+    # window keeps a genuine lyric that happens to fall nearby from being
+    # swallowed as a translation.
+    tolerance = 0.006  # half a hundredth: the precision the stamps are written at
     merged: list[LyricLine] = []
     index = 0
     while index < len(lines):
         line = lines[index]
         nxt = lines[index + 1] if index + 1 < len(lines) else None
-        if nxt is not None and nxt.start == line.start and line.translation is None:
+        paired = (
+            nxt is not None
+            and line.start is not None
+            and nxt.start is not None
+            and abs((nxt.start - line.start) - offset) <= tolerance
+            and line.translation is None
+        )
+        if paired:
             line.translation = nxt.text
             index += 2
         else:
@@ -223,6 +250,12 @@ def parse_plain(content: str) -> Lyrics:
 BILINGUAL_STYLES = ("off", "inline", "stacked")
 DEFAULT_SEPARATOR = " / "
 
+# Stacked lines must not share a timestamp. Players commonly key their lyrics
+# by time, so a duplicate silently overwrites the original and only the
+# translation survives. Nudging it a few hundredths apart keeps both, while
+# staying far below what anyone can perceive as a delay.
+DEFAULT_TRANSLATION_OFFSET = 0.05
+
 
 def format_lrc(
     lyrics: Lyrics,
@@ -233,6 +266,7 @@ def format_lrc(
     metadata: dict[str, str] | None = None,
     bilingual: str = "off",
     separator: str = DEFAULT_SEPARATOR,
+    translation_offset: float = DEFAULT_TRANSLATION_OFFSET,
 ) -> str:
     """Render :class:`Lyrics` as LRC text.
 
@@ -258,6 +292,8 @@ def format_lrc(
         out.append(f"[tr:{language}]")
         if bilingual == "inline":
             out.append(f"[trsep:{separator}]")
+        else:
+            out.append(f"[troff:{int(round(translation_offset * 1000))}]")
 
     timed = [ln for ln in lyrics.lines if ln.start is not None]
     previous = 0.0
@@ -282,7 +318,11 @@ def format_lrc(
             out.append(f"[{stamp}]{line.text}")
 
         if translation and bilingual == "stacked":
-            out.append(f"[{stamp}]{translation}")
+            # Shift in whole stamp units, not seconds: truncating
+            # ``start + offset`` can lose a hundredth to binary rounding, and
+            # the gap in the file would then no longer match the declared one.
+            shifted = _ticks(start, decimals) + int(round(translation_offset * 10**decimals))
+            out.append(f"[{_format_ticks(shifted, decimals)}]{translation}")
 
         previous = start
 

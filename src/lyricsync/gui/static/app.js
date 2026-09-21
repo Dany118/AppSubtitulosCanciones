@@ -265,6 +265,7 @@ function syncOptions() {
     sidecarOnly: $("o-sidecaronly").checked,
     translate: $("o-translate").checked,
     bilingual: $("o-bilingual").value,
+    translationOffset: parseFloat($("o-troff").value) || 0,
   };
 }
 

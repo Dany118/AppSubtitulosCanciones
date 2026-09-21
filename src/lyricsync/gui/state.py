@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..lrc import format_lrc, parse_lrc, to_sylt
+from ..lrc import DEFAULT_TRANSLATION_OFFSET, format_lrc, parse_lrc, to_sylt
 from ..models import LyricLine, Lyrics, Source, TrackMeta, Word
 from ..tags import is_synced_text, read_embedded_lyrics, read_meta, write_lyrics
 from ..validate import validate_timing
@@ -21,6 +21,7 @@ class AppConfig:
     # header is re-rendered the way it was written.
     bilingual: str = "inline"
     target_language: str = "es"
+    translation_offset: float = DEFAULT_TRANSLATION_OFFSET
     write_sidecar: bool = True
     enhanced_sidecar: bool = False
     write_sylt: bool = True
@@ -118,6 +119,7 @@ def apply_edits(lyrics: Lyrics, starts: list[float | None]) -> Lyrics:
         album=lyrics.album,
         translation_language=lyrics.translation_language,
         bilingual_style=lyrics.bilingual_style,
+        translation_offset=lyrics.translation_offset,
     )
 
 
@@ -137,6 +139,9 @@ def render(lyrics: Lyrics, meta: TrackMeta, config: AppConfig) -> str:
         decimals=config.decimals,
         metadata={k: v for k, v in metadata.items() if v},
         bilingual=style if lyrics.translated else "off",
+        translation_offset=(lyrics.translation_offset
+                            if lyrics.translation_offset is not None
+                            else config.translation_offset),
     )
 
 
@@ -166,7 +171,10 @@ def save_track(path: Path, lyrics: Lyrics, config: AppConfig) -> dict:
         body = (
             format_lrc(lyrics, enhanced=True, decimals=config.decimals,
                        bilingual=(lyrics.bilingual_style or config.bilingual)
-                       if lyrics.translated else "off")
+                       if lyrics.translated else "off",
+                       translation_offset=(lyrics.translation_offset
+                            if lyrics.translation_offset is not None
+                            else config.translation_offset))
             if config.enhanced_sidecar and lyrics.word_level
             else lrc_text
         )

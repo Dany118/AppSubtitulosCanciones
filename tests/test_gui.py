@@ -509,15 +509,29 @@ def test_saving_a_timing_fix_keeps_the_translation(client: httpx.Client, bilingu
 def test_saving_preserves_a_stacked_layout(client: httpx.Client, track: Path) -> None:
     """A file written line-apart must not come back joined on one line."""
     track.with_suffix(".lrc").write_text(
-        "[tr:es]\n[00:00.50]alpha bravo\n[00:00.50]alfa bravo\n", encoding="utf-8"
+        "[tr:es]\n[troff:50]\n[00:00.50]alpha bravo\n[00:00.55]alfa bravo\n",
+        encoding="utf-8",
     )
     client.get("/api/track/0")
     assert client.post("/api/track/0/save", json={"starts": [1.0]}).status_code == 200
 
     written = track.with_suffix(".lrc").read_text(encoding="utf-8")
     assert "[00:01.00]alpha bravo" in written
-    assert "[00:01.00]alfa bravo" in written
+    assert "[00:01.05]alfa bravo" in written, "the pair keeps its separation"
     assert "/" not in written, "an inline separator would change the layout"
+
+
+def test_saving_upgrades_a_colliding_legacy_file(client: httpx.Client, track: Path) -> None:
+    """Same-timestamp pairs are the layout players drop a line from."""
+    track.with_suffix(".lrc").write_text(
+        "[tr:es]\n[00:00.50]alpha bravo\n[00:00.50]alfa bravo\n", encoding="utf-8"
+    )
+    client.get("/api/track/0")
+    client.post("/api/track/0/save", json={"starts": [1.0]})
+
+    written = track.with_suffix(".lrc").read_text(encoding="utf-8")
+    assert "[00:01.00]alpha bravo" in written
+    assert "[00:01.00]alfa bravo" not in written, "the collision must be gone"
 
 
 def test_saving_an_untranslated_track_adds_no_header(client: httpx.Client, track: Path) -> None:

@@ -164,10 +164,16 @@ convenciones y cada reproductor se lleva mejor con una:
 | Formato | Cómo queda | Cuándo usarlo |
 |---------|-----------|---------------|
 | `inline` (misma línea) | `[00:12.34]the original line / la línea traducida` | Funciona en cualquier reproductor, porque es una línea de texto normal |
-| `stacked` (línea aparte) | dos líneas con la misma marca de tiempo | Se lee mejor en el móvil, si tu reproductor muestra líneas consecutivas |
+| `stacked` (línea aparte) | dos líneas seguidas, separadas unas centésimas | Se lee mejor en el móvil |
 
 **Prueba las dos en tu reproductor.** Cuál se ve mejor no lo puede decidir el
 código.
+
+Con `stacked`, la traducción se escribe **0,05 s después** de su original, no en
+el mismo instante. Es necesario: muchos reproductores guardan las líneas
+indexadas por tiempo, así que dos con la misma marca se pisan y solo sobrevive
+la segunda — se ve únicamente el español. Ajústalo con `--translation-offset`
+(o el campo *Separación* en la interfaz) si tu reproductor necesita más hueco.
 
 ### De dónde sale la traducción
 

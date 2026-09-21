@@ -43,6 +43,11 @@ def sync(
     translate: bool = typer.Option(False, "--translate", help="Add a translation beside each original line."),
     language: str = typer.Option("es", "--lang", help="Target language for --translate."),
     bilingual: str = typer.Option("inline", "--bilingual", help="How to lay out a translation: inline or stacked."),
+    translation_offset: float = typer.Option(
+        0.05, "--translation-offset",
+        help="Seconds a stacked translation sits after its original. Zero makes "
+             "them share a timestamp, which some players resolve by dropping one.",
+    ),
     lead_in: float = typer.Option(0.0, "--lead-in", help="Show each line this many seconds early."),
     id3: int = typer.Option(3, "--id3", help="ID3 version to save: 3 (widest Android support) or 4."),
     offline: bool = typer.Option(False, "--offline", help="Do not query LRCLIB; use local files only."),
@@ -73,6 +78,7 @@ def sync(
         translate=translate,
         target_language=language,
         bilingual=bilingual,
+        translation_offset=max(0.0, translation_offset),
         enhanced_sidecar=enhanced,
         lead_in=lead_in,
         separate_vocals=demucs,

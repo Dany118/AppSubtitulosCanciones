@@ -22,7 +22,7 @@ from .align.forced import AlignmentError, ForcedAligner
 from .audio import AudioError, decode_mono, separate_vocals, vocal_onset
 from .lrc import attach_words, format_lrc, to_sylt
 from .models import Lyrics, ProcessResult, Source, Status, TrackMeta, Word
-from .lrc import read_tool_tag
+from .lrc import DEFAULT_TRANSLATION_OFFSET, read_tool_tag
 from .providers import EmbeddedProvider, LocalFileProvider, LrclibProvider
 from .translate.local import MarianTranslator, TranslationError
 from .translate.sidecar import SidecarTranslator
@@ -59,6 +59,8 @@ class Config:
     translate: bool = False
     target_language: str = "es"
     bilingual: str = "inline"      # see lrc.BILINGUAL_STYLES
+    # Only used by the stacked layout; see lrc.DEFAULT_TRANSLATION_OFFSET.
+    translation_offset: float = DEFAULT_TRANSLATION_OFFSET
 
     # Behaviour
     separate_vocals: bool = True
@@ -250,6 +252,7 @@ class Pipeline:
             lead_in=self.config.lead_in,
             metadata={k: v for k, v in metadata.items() if v},
             bilingual=self.config.bilingual if lyrics.translated else "off",
+            translation_offset=self.config.translation_offset,
         )
 
     def write(self, meta: TrackMeta, lyrics: Lyrics, lrc_text: str) -> None:
@@ -275,6 +278,7 @@ class Pipeline:
                     decimals=self.config.decimals,
                     lead_in=self.config.lead_in,
                     bilingual=self.config.bilingual if lyrics.translated else "off",
+                    translation_offset=self.config.translation_offset,
                 )
                 if self.config.enhanced_sidecar and lyrics.word_level
                 else lrc_text

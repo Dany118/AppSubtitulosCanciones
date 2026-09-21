@@ -13,7 +13,7 @@ from ..validate import validate_timing
 
 
 @dataclass
-class ReviewConfig:
+class AppConfig:
     """Write settings, mirroring the pipeline's so both agree on output."""
 
     id3_version: int = 3
@@ -112,7 +112,7 @@ def apply_edits(lyrics: Lyrics, starts: list[float | None]) -> Lyrics:
     )
 
 
-def render(lyrics: Lyrics, meta: TrackMeta, config: ReviewConfig) -> str:
+def render(lyrics: Lyrics, meta: TrackMeta, config: AppConfig) -> str:
     from .. import __version__
 
     metadata = {
@@ -128,7 +128,7 @@ def render(lyrics: Lyrics, meta: TrackMeta, config: ReviewConfig) -> str:
     )
 
 
-def save_track(path: Path, lyrics: Lyrics, config: ReviewConfig) -> dict:
+def save_track(path: Path, lyrics: Lyrics, config: AppConfig) -> dict:
     """Write edited timings back to the MP3 and its sidecars.
 
     Validation runs but never blocks: in the reviewer the user is listening to

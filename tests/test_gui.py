@@ -15,8 +15,8 @@ import httpx
 import pytest
 from mutagen.id3 import ID3, TIT2, TPE1
 
-from lyricsync.review.server import ReviewServer
-from lyricsync.review.state import ReviewConfig, apply_edits, load_track
+from lyricsync.gui.server import AppServer
+from lyricsync.gui.state import AppConfig, apply_edits, load_track
 from lyricsync.models import LyricLine, Lyrics, Source, Word
 from lyricsync.tags import read_embedded_lyrics
 from conftest import build_mp3_bytes
@@ -38,7 +38,7 @@ def track(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def client(track: Path) -> Iterator[httpx.Client]:
-    server = ReviewServer(("127.0.0.1", 0), [track], ReviewConfig())
+    server = AppServer(("127.0.0.1", 0), [track], AppConfig())
     # A short poll interval keeps per-test teardown from costing half a second.
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
     thread.start()
@@ -57,11 +57,12 @@ def test_index_serves_the_page(client: httpx.Client) -> None:
     assert "lyricsync" in response.text
 
 
-def test_track_list(client: httpx.Client) -> None:
-    payload = client.get("/api/tracks").json()
+def test_library_lists_tracks(client: httpx.Client) -> None:
+    payload = client.get("/api/library").json()
     assert len(payload["tracks"]) == 1
     entry = payload["tracks"][0]
     assert entry["name"] == "track.mp3"
+    assert entry["title"] == "Placeholder Title"
     assert entry["hasLyrics"] and entry["lines"] == 2
 
 
@@ -220,3 +221,160 @@ def test_apply_edits_rejects_a_length_mismatch() -> None:
     lyrics = Lyrics([LyricLine("alpha", 1.0)], Source.LOCAL_LRC)
     with pytest.raises(ValueError, match="expected 1"):
         apply_edits(lyrics, [1.0, 2.0])
+
+
+# ------------------------------------------------------------------ library
+
+def test_library_can_be_pointed_at_another_folder(client: httpx.Client, tmp_path: Path) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "a.mp3").write_bytes(build_mp3_bytes(20))
+    (other / "b.mp3").write_bytes(build_mp3_bytes(20))
+
+    payload = client.post("/api/library", json={"path": str(other)}).json()
+    assert [t["name"] for t in payload["tracks"]] == ["a.mp3", "b.mp3"]
+    assert payload["folder"] == str(other)
+
+
+def test_library_rejects_a_missing_folder(client: httpx.Client, tmp_path: Path) -> None:
+    response = client.post("/api/library", json={"path": str(tmp_path / "nope")})
+    assert response.status_code == 400
+    assert "no such folder" in response.json()["error"]
+
+
+def test_library_requires_a_path(client: httpx.Client) -> None:
+    assert client.post("/api/library", json={}).status_code == 400
+
+
+def test_switching_folder_reindexes_audio(client: httpx.Client, tmp_path: Path) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "only.mp3").write_bytes(build_mp3_bytes(20))
+
+    client.post("/api/library", json={"path": str(other)})
+    assert client.get("/api/audio/0").status_code == 200
+    assert client.get("/api/audio/1").status_code == 404, "stale indices must not resolve"
+
+
+# ------------------------------------------------------------------ inspect
+
+def test_inspect_reports_tags(client: httpx.Client) -> None:
+    client.post("/api/track/0/save", json={"starts": [0.5, 1.2]})
+    data = client.get("/api/inspect/0").json()
+
+    assert data["name"] == "track.mp3"
+    assert any(f.startswith("USLT") for f in data["frames"])
+    assert data["marker"] is not None
+    assert data["sidecar"] is True
+    assert "[00:00.50]alpha bravo" in data["embedded"]
+
+
+def test_inspect_unknown_track(client: httpx.Client) -> None:
+    assert client.get("/api/inspect/9").status_code == 404
+
+
+# ------------------------------------------------------------------- export
+
+def test_export_writes_a_plain_sidecar(client: httpx.Client, track: Path) -> None:
+    response = client.post("/api/export", json={"index": 0, "enhanced": False})
+    assert response.status_code == 200
+    assert response.json()["lines"] == 2
+    assert "[00:00.50]alpha bravo" in track.with_suffix(".lrc").read_text(encoding="utf-8")
+
+
+def test_export_enhanced_needs_word_timings(client: httpx.Client) -> None:
+    response = client.post("/api/export", json={"index": 0, "enhanced": True})
+    assert response.status_code == 400
+    assert "word-level" in response.json()["error"]
+
+
+def test_export_rejects_an_unknown_track(client: httpx.Client) -> None:
+    assert client.post("/api/export", json={"index": 7}).status_code == 400
+
+
+# ---------------------------------------------------------------------- jobs
+
+def wait_for_job(client: httpx.Client, job_id: str, timeout: float = 15.0) -> dict:
+    import time
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        data = client.get(f"/api/jobs/{job_id}").json()
+        if data["status"] != "running":
+            return data
+        time.sleep(0.02)
+    raise AssertionError("job did not finish in time")
+
+
+def test_strip_job_removes_lyrics(client: httpx.Client, track: Path) -> None:
+    client.post("/api/track/0/save", json={"starts": [0.5, 1.2]})
+
+    started = client.post("/api/jobs/strip", json={"indices": [0]})
+    assert started.status_code == 202
+
+    job = wait_for_job(client, started.json()["id"])
+    assert job["status"] == "finished"
+    assert job["done"] == 1
+    assert read_embedded_lyrics(track) is None
+
+
+def test_strip_job_can_delete_the_sidecar(client: httpx.Client, track: Path) -> None:
+    started = client.post("/api/jobs/strip", json={"indices": [0], "options": {"sidecar": True}})
+    wait_for_job(client, started.json()["id"])
+    assert not track.with_suffix(".lrc").exists()
+
+
+def test_sync_job_runs_offline(client: httpx.Client, track: Path) -> None:
+    track.with_suffix(".lrc").write_text(SHORT_LRC, encoding="utf-8")
+    started = client.post("/api/jobs/sync", json={
+        "indices": [0],
+        "options": {"offline": True, "demucs": False, "force": True},
+    })
+    assert started.status_code == 202
+
+    job = wait_for_job(client, started.json()["id"])
+    assert job["status"] == "finished"
+    assert job["events"][0]["status"] == "ok"
+    assert read_embedded_lyrics(track) is not None
+
+
+def test_job_defaults_to_the_whole_library(client: httpx.Client) -> None:
+    started = client.post("/api/jobs/strip", json={})
+    job = wait_for_job(client, started.json()["id"])
+    assert job["total"] == 1
+
+
+def test_job_rejects_bad_indices(client: httpx.Client) -> None:
+    assert client.post("/api/jobs/strip", json={"indices": [5]}).status_code == 400
+    assert client.post("/api/jobs/strip", json={"indices": "all"}).status_code == 400
+
+
+def test_job_rejects_an_empty_selection(client: httpx.Client) -> None:
+    assert client.post("/api/jobs/strip", json={"indices": []}).status_code == 400
+
+
+def test_unknown_job_kind_is_404(client: httpx.Client) -> None:
+    assert client.post("/api/jobs/frobnicate", json={}).status_code == 404
+
+
+def test_unknown_job_id_is_404(client: httpx.Client) -> None:
+    assert client.get("/api/jobs/deadbeef").status_code == 404
+
+
+def test_cancel_reports_whether_it_took_effect(client: httpx.Client) -> None:
+    assert client.post("/api/jobs/deadbeef/cancel").json()["cancelled"] is False
+
+
+# ------------------------------------------------------------------ history
+
+def test_history_is_empty_without_a_cache(client: httpx.Client) -> None:
+    assert client.get("/api/history").json()["runs"] == []
+
+
+# ------------------------------------------------------------------- assets
+
+def test_static_assets_are_served_with_correct_types(client: httpx.Client) -> None:
+    for asset, expected in (("/app.css", "text/css"), ("/app.js", "text/javascript")):
+        response = client.get(asset)
+        assert response.status_code == 200, asset
+        assert expected in response.headers["content-type"]

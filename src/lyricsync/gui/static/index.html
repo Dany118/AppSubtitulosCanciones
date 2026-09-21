@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lyricsync</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%20fill%3D%22%235aa9f0%22/%3E%3Cg%20fill%3D%22%23fff%22%3E%3Crect%20x%3D%227%22%20y%3D%229%22%20width%3D%2212%22%20height%3D%222.6%22%20rx%3D%221.3%22/%3E%3Crect%20x%3D%227%22%20y%3D%2215%22%20width%3D%2218%22%20height%3D%222.6%22%20rx%3D%221.3%22/%3E%3Crect%20x%3D%227%22%20y%3D%2221%22%20width%3D%229%22%20height%3D%222.6%22%20rx%3D%221.3%22/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>lyricsync <span>letras sincronizadas</span></h1>
+    <div class="folder">
+      <input id="folder" type="text" placeholder="Ruta de tu carpeta de música" spellcheck="false">
+      <button class="act" id="browse">Examinar…</button>
+      <button class="act" id="open">Abrir</button>
+      <button class="act" id="reload">Recargar</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button data-tab="library" aria-selected="true">Biblioteca</button>
+    <button data-tab="review" aria-selected="false">Revisar</button>
+    <button data-tab="inspect" aria-selected="false">Inspeccionar</button>
+    <button data-tab="history" aria-selected="false">Historial</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ------------------------------------------------------------ library -->
+  <section class="panel active" id="tab-library">
+    <div class="bar">
+      <button class="act" id="selall">Seleccionar todo</button>
+      <span id="count">ninguna seleccionada</span>
+      <span class="spacer"></span>
+      <button class="act" id="opts">Opciones</button>
+      <button class="act danger" id="dostrip" disabled>Limpiar letra</button>
+      <button class="act primary" id="dosync" disabled>Sincronizar</button>
+    </div>
+
+    <div class="options" id="options">
+      <label><input type="checkbox" id="o-demucs" checked> Aislar voz (Demucs)</label>
+      <label><input type="checkbox" id="o-asr"> Transcribir si no hay letra</label>
+      <label><input type="checkbox" id="o-offline"> Sin red</label>
+      <label><input type="checkbox" id="o-force"> Reprocesar ya hechas</label>
+      <label><input type="checkbox" id="o-backup"> Copia .bak</label>
+      <label><input type="checkbox" id="o-dry"> Simulacro</label>
+      <label><input type="checkbox" id="o-enhanced"> Sidecar por palabra</label>
+      <label>Dispositivo
+        <select id="o-device"><option value="cuda">cuda</option><option value="cpu">cpu</option></select>
+      </label>
+      <label>Adelanto <input type="number" id="o-lead" value="0" step="0.05" min="0" max="2"> s</label>
+      <p class="hint">
+        Aislar la voz es mucho más preciso pero más lento. «Simulacro» informa de lo que
+        pasaría sin escribir nada. «Adelanto» muestra cada línea antes de cantarse.
+      </p>
+    </div>
+
+    <div class="job hidden" id="job">
+      <div class="jobhead">
+        <strong id="jobtitle"></strong>
+        <progress id="jobbar" value="0" max="1"></progress>
+        <span id="jobnow"></span>
+        <button class="act" id="jobcancel">Cancelar</button>
+      </div>
+      <div class="joblog" id="joblog"></div>
+    </div>
+
+    <div class="scroll">
+      <p class="empty" id="libempty">
+        Elige la carpeta donde tienes los MP3 y pulsa <strong>Abrir</strong>.
+      </p>
+      <table id="libtable" style="display:none">
+        <thead>
+          <tr>
+            <th></th><th class="name">Pista</th><th class="num">Dur.</th>
+            <th>Estado</th><th class="num">Líneas</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="libbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------- review -->
+  <section class="panel" id="tab-review">
+    <div class="bar">
+      <strong id="now">Elige una pista en Biblioteca</strong>
+      <span class="spacer"></span>
+      <button class="act" id="exportlrc">Exportar .lrc por palabra</button>
+    </div>
+
+    <div id="lyrics">
+      <p class="empty">Abre una pista desde la pestaña Biblioteca.</p>
+    </div>
+
+    <div class="bar bottom">
+      <audio id="player" controls preload="metadata"></audio>
+      <button class="act" id="back" title="Atrasar 100 ms (Shift: 10 ms)">◀ −100ms</button>
+      <span id="offset">0 ms</span>
+      <button class="act" id="fwd" title="Adelantar 100 ms (Shift: 10 ms)">+100ms ▶</button>
+      <button class="act" id="tap" disabled title="Fijar el inicio de la línea al momento actual">Marcar línea (T)</button>
+      <button class="act" id="reset" disabled>Descartar</button>
+      <button class="act primary" id="save" disabled>Guardar</button>
+      <div id="status">
+        <kbd>espacio</kbd> reproducir · <kbd>←</kbd><kbd>→</kbd> ajustar toda la letra ·
+        <kbd>↑</kbd><kbd>↓</kbd> seleccionar línea · <kbd>T</kbd> marcar · <kbd>Ctrl+S</kbd> guardar
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ inspect -->
+  <section class="panel" id="tab-inspect">
+    <div class="scroll" id="inspectbox">
+      <p class="empty">Carga una carpeta primero.</p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ history -->
+  <section class="panel" id="tab-history">
+    <div class="scroll">
+      <p class="empty" id="histempty">Todavía no hay ejecuciones registradas.</p>
+      <table id="histtable" style="display:none">
+        <thead><tr><th>Estado</th><th>Archivo</th><th>Origen</th><th>Nota</th></tr></thead>
+        <tbody id="histbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

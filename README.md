@@ -92,8 +92,8 @@ lyricsync strip "cancion.mp3"
 # Regenerar el .lrc con resaltado por palabra
 lyricsync export "cancion.mp3" --enhanced
 
-# Revisar y corregir los tiempos a oído en el navegador
-lyricsync review ~/Musica
+# Abrir la aplicación gráfica (todo lo anterior, en una ventana)
+lyricsync gui
 ```
 
 ### Opciones útiles
@@ -109,10 +109,48 @@ lyricsync review ~/Musica
 
 ---
 
-## El revisor web
+## La aplicación gráfica
+
+Todo lo que hacen los comandos, en una ventana:
+
+```bash
+lyricsync gui                 # elige la carpeta dentro de la app
+lyricsync gui ~/Musica        # o ábrela ya cargada
+```
+
+Se abre en el navegador (en `127.0.0.1`, solo tu máquina). Cuatro pestañas:
+
+**Biblioteca** — la lista de pistas con su estado (sincronizada, por palabra, sin
+letra). Marcas las que quieras y pulsas **Sincronizar** o **Limpiar letra**. En
+**Opciones** están todos los modificadores de la CLI: aislar voz, transcribir,
+sin red, reprocesar, copia `.bak`, simulacro, dispositivo y adelanto.
+
+El trabajo corre en segundo plano con barra de progreso y un registro en vivo
+línea a línea, y se puede **cancelar**: se detiene tras la pista en curso, sin
+dejar ningún archivo a medias.
+
+**Revisar** — el reproductor con la letra scrolleando y las mismas teclas de
+siempre (`←` `→` mueven toda la letra, `T` remarca una línea suelta, `Ctrl+S`
+guarda).
+
+**Inspeccionar** — qué frames tiene el MP3 ahora mismo, si hay sidecar, si hay
+tiempos por palabra, y la letra embebida tal cual.
+
+**Historial** — las últimas ejecuciones con su resultado.
+
+El botón **Examinar…** abre el selector de carpetas del sistema. Si no está
+disponible, se escribe la ruta a mano y la app lo dice en vez de fallar.
+
+
+---
+
+## El revisor, en detalle
 
 Lo que convierte "casi en tiempo" en "en tiempo". Abre un reproductor local en
 el navegador con la letra scrolleando, y la corriges a oído:
+
+Está en la pestaña **Revisar** de la app. También se abre directo sobre una
+carpeta:
 
 ```bash
 lyricsync review ~/Musica
@@ -179,7 +217,7 @@ src/lyricsync/
   cli.py          Interfaz de línea de comandos
   providers/      De dónde sale la letra (LRCLIB, archivos locales, embebida)
   align/          Cómo se sincroniza (alineación forzada, ASR)
-  review/         Revisor web local (servidor stdlib con soporte de Range)
+  gui/            Aplicación web local (servidor stdlib con soporte de Range)
 ```
 
 ## Desarrollo
@@ -190,15 +228,16 @@ pytest
 ```
 
 Los tests construyen un MP3 sintético a partir de cabeceras MPEG y simulan las
-respuestas HTTP, así que la suite no necesita ffmpeg, ni GPU, ni red.
+respuestas HTTP, así que la suite no necesita ffmpeg, ni GPU, ni red. Los del
+servidor levantan uno real en un puerto efímero.
 
 ## Estado
 
 - **Fase 1** — letra sincronizada desde LRCLIB y archivos locales. ✅
 - **Fase 2** — alineación forzada con tiempos por palabra, aislado de voz,
   validación y ASR de reserva. ✅ (requiere el extra `[align]`)
-- **Fase 3** — lotes con caché e idempotencia, y revisor web para ajustar los
-  tiempos a oído. ✅
+- **Fase 3** — lotes con caché e idempotencia, y aplicación gráfica con
+  biblioteca, sincronización en segundo plano, revisor, inspector e historial. ✅
 
 ## Nota
 
